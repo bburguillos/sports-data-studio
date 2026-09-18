@@ -185,7 +185,20 @@ def make_hist(values,title,unit,bins=6):
 
 def make_box(values_list,labels,title,unit):
     fig,ax=plt.subplots(figsize=(8,4))
-    ax.boxplot(values_list,labels=labels,vert=False)
+    # Matplotlib 3.10+ renamed labels -> tick_labels and vert -> orientation.
+    # Use the current API first, then fall back for older installs.
+    try:
+        ax.boxplot(
+            values_list,
+            tick_labels=labels,
+            orientation="horizontal"
+        )
+    except TypeError:
+        ax.boxplot(
+            values_list,
+            labels=labels,
+            vert=False
+        )
     ax.set_title(title)
     ax.set_xlabel(unit or "Value")
     fig.tight_layout()
@@ -217,16 +230,41 @@ def make_pie(categories,counts,title):
     fig.tight_layout()
     return fig
 
-def prediction_section(mode_key,prompts):
-    st.markdown('<div class="prediction-box"><div class="studio-step">Predict Before You Calculate</div>',unsafe_allow_html=True)
+def prediction_section(mode_key,prompts,teacher_mode):
+    st.markdown(
+        '<div class="prediction-box"><div class="studio-step">Predict Before You Calculate</div>',
+        unsafe_allow_html=True
+    )
     answers={}
     for i,p in enumerate(prompts):
-        answers[p]=st.text_area(p,key=f"pred_{mode_key}_{i}",height=80,placeholder="Write a quick prediction and explain your thinking.")
+        answers[p]=st.text_area(
+            p,
+            key=f"pred_{mode_key}_{i}",
+            height=80,
+            placeholder="Write your prediction. A short answer is okay."
+        )
     st.markdown("</div>",unsafe_allow_html=True)
-    return answers
 
-def ready_to_reveal(predictions,teacher_mode):
-    return teacher_mode or all(len(str(v).strip())>=5 for v in predictions.values())
+    lock_key = f"predictions_locked_{mode_key}"
+
+    if teacher_mode:
+        st.session_state[lock_key] = True
+    else:
+        all_answered = all(str(v).strip() for v in answers.values())
+        if st.button(
+            "🔒 Lock In Predictions & Reveal Analysis",
+            key=f"lock_predictions_{mode_key}",
+            use_container_width=True,
+            disabled=not all_answered
+        ):
+            st.session_state[lock_key] = True
+
+        if not all_answered:
+            st.caption("Answer each prediction question, then click **Lock In Predictions & Reveal Analysis**.")
+        elif not st.session_state.get(lock_key, False):
+            st.caption("Your predictions are ready. Click the button above to reveal the analysis.")
+
+    return answers, bool(st.session_state.get(lock_key, False))
 
 st.markdown("""
 <div class="studio-card">
@@ -247,6 +285,13 @@ with top2:
     teacher_mode=st.toggle("🛠️ Teacher Mode",value=False)
     st.caption("Teacher Mode reveals results immediately. Student Mode requires predictions first.")
 
+# Keep each mode's prediction lock separate. Switching modes does not carry a reveal state over.
+if "last_studio_mode" not in st.session_state:
+    st.session_state["last_studio_mode"] = mode
+elif st.session_state["last_studio_mode"] != mode:
+    st.session_state["last_studio_mode"] = mode
+
+
 dataset_name=st.text_input("Dataset / activity name",placeholder="Example: 40-Yard Dash")
 unit=st.text_input("Unit",placeholder="Example: seconds, points, inches")
 
@@ -256,14 +301,13 @@ if mode=="Analyze One Data Set":
     values,bad=parse_numeric_text(raw)
     if bad:
         st.warning("Ignored non-numeric entries: "+", ".join(bad[:10]))
-    preds=prediction_section("one",[
+    preds,reveal=prediction_section("one",[
         "About what do you predict the mean will be?",
         "Do you predict there is an outlier? Why?",
         "What do you think the graph will look like?"
-    ])
-    reveal=ready_to_reveal(preds,teacher_mode)
+    ],teacher_mode)
     if not reveal:
-        st.info("In Student Mode, enter your predictions before revealing the analysis.")
+        st.info("In Student Mode, answer the prediction questions and click **Lock In Predictions & Reveal Analysis**.")
     if values and reveal:
         s=numerical_summary(values)
         st.markdown("### Statistical Summary")
@@ -301,14 +345,13 @@ elif mode=="Compare Two Groups":
     b,bad_b=parse_numeric_text(raw_b)
     if bad_a or bad_b:
         st.warning("Some non-numeric entries were ignored.")
-    preds=prediction_section("compare",[
+    preds,reveal=prediction_section("compare",[
         "Which group do you predict will have the higher mean? Why?",
         "Which group do you predict will be more consistent? Why?",
         "Do you predict either group has an outlier?"
-    ])
-    reveal=ready_to_reveal(preds,teacher_mode)
+    ],teacher_mode)
     if not reveal:
-        st.info("In Student Mode, enter your predictions before revealing the comparison.")
+        st.info("In Student Mode, answer the prediction questions and click **Lock In Predictions & Reveal Analysis**.")
     if a and b and reveal:
         sa,sb=numerical_summary(a),numerical_summary(b)
         st.markdown(f"### {name_a}")
@@ -355,14 +398,13 @@ elif mode=="Change Over Time":
         labels.append(label); period_data.append(vals)
         if bad:
             st.warning(f"{label}: some entries were ignored.")
-    preds=prediction_section("time",[
+    preds,reveal=prediction_section("time",[
         "Do you predict the group improved, declined, or stayed about the same?",
         "Do you predict the group became more or less consistent?",
         "Which time period do you think will have the strongest typical performance?"
-    ])
-    reveal=ready_to_reveal(preds,teacher_mode)
+    ],teacher_mode)
     if not reveal:
-        st.info("In Student Mode, enter your predictions before revealing the trend.")
+        st.info("In Student Mode, answer the prediction questions and click **Lock In Predictions & Reveal Analysis**.")
     if all(period_data) and reveal:
         summaries=[numerical_summary(v) for v in period_data]
         rows=[]
@@ -406,13 +448,12 @@ else:
                 count=st.number_input(f"Count {i+1}",min_value=0,step=1,key=f"cat_count_{i}")
             if cat.strip():
                 categories.append(cat.strip()); counts.append(int(count))
-    preds=prediction_section("cat",[
+    preds,reveal=prediction_section("cat",[
         "Which category do you predict will be most common?",
         "Which category do you predict will make up the largest percent of the total?"
-    ])
-    reveal=ready_to_reveal(preds,teacher_mode)
+    ],teacher_mode)
     if not reveal:
-        st.info("In Student Mode, enter your predictions before revealing the categorical analysis.")
+        st.info("In Student Mode, answer the prediction questions and click **Lock In Predictions & Reveal Analysis**.")
     if categories and sum(counts)>0 and reveal:
         total=sum(counts)
         df=pd.DataFrame({
