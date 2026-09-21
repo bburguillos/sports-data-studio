@@ -204,6 +204,100 @@ section[data-testid="stMain"] {
     font-weight:800;
     letter-spacing:.02em;
 }
+
+/* iPhone/iPad layout: large tap targets, readable form text, and controlled
+   wrapping without changing any classroom calculations or saved content. */
+button,
+label,
+[role="radio"],
+[role="checkbox"] {
+    touch-action:manipulation;
+}
+img,
+canvas,
+svg {
+    max-width:100%;
+}
+[data-testid="stDataFrame"],
+[data-testid="stTable"] {
+    max-width:100%;
+    overflow-x:auto !important;
+    -webkit-overflow-scrolling:touch;
+}
+
+@media (max-width: 768px) {
+    .block-container,
+    [data-testid="stMainBlockContainer"] {
+        max-width:100% !important;
+        padding-top:max(.8rem, env(safe-area-inset-top)) !important;
+        padding-right:max(.8rem, env(safe-area-inset-right)) !important;
+        padding-bottom:max(1.25rem, env(safe-area-inset-bottom)) !important;
+        padding-left:max(.8rem, env(safe-area-inset-left)) !important;
+    }
+    h1 {font-size:1.9rem !important; line-height:1.14 !important;}
+    h2 {font-size:1.55rem !important; line-height:1.2 !important;}
+    h3 {font-size:1.25rem !important; line-height:1.25 !important;}
+    .studio-card {
+        padding:13px 14px !important;
+        border-radius:13px !important;
+        margin-bottom:12px !important;
+    }
+    [role="radiogroup"] {
+        display:flex !important;
+        flex-wrap:wrap !important;
+        align-items:stretch !important;
+        gap:.3rem .65rem !important;
+    }
+    [role="radiogroup"] > label {
+        flex:1 1 145px !important;
+        min-height:44px !important;
+        margin:0 !important;
+        padding:.35rem .15rem !important;
+        align-items:center !important;
+    }
+    div.stButton > button,
+    div[data-testid="stDownloadButton"] > button {
+        width:100% !important;
+        min-height:48px !important;
+        padding:.65rem .85rem !important;
+    }
+    input,
+    textarea,
+    [data-baseweb="select"] input,
+    [data-baseweb="select"] > div {
+        font-size:16px !important; /* Prevents Safari's automatic input zoom. */
+    }
+    input,
+    [data-baseweb="select"] > div {
+        min-height:46px !important;
+    }
+    textarea {
+        min-height:108px !important;
+        line-height:1.4 !important;
+    }
+    [data-testid="stNumberInput"] button {
+        min-width:44px !important;
+        min-height:44px !important;
+    }
+    [data-testid="stHorizontalBlock"] {
+        gap:.55rem !important;
+    }
+    [data-testid="stMetric"] {
+        min-width:135px !important;
+    }
+    [data-testid="stExpander"] summary {
+        min-height:48px !important;
+        align-items:center !important;
+    }
+}
+
+@media (max-width: 480px) {
+    [role="radiogroup"] > label {
+        flex-basis:100% !important;
+    }
+    .build-badge {font-size:.68rem !important;}
+    [data-testid="stCaptionContainer"] p {font-size:.88rem !important;}
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -1696,7 +1790,7 @@ st.markdown("""
   <div class="studio-step">Sports by the Numbers</div>
   <h1 style="margin:.2rem 0 .35rem;">📊 Sports Data Studio</h1>
   <p style="margin:0;">Enter it. Graph it. Analyze it. Defend it.</p>
-  <span class="build-badge">Light UI build 2026.09.21</span>
+  <span class="build-badge">Mobile + Light UI build 2026.09.21</span>
 </div>
 """,unsafe_allow_html=True)
 
