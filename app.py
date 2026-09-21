@@ -942,6 +942,112 @@ def render_assignment_controls(teacher_mode, mode):
             st.session_state.pop("active_assignment", None)
 
 
+def render_teacher_review_dashboard():
+    st.markdown("## 🧾 Teacher Review Dashboard")
+    st.caption("Upload student progress files downloaded from the Save & Resume panel to review submissions in one place.")
+    uploads = st.file_uploader(
+        "Upload student progress files",
+        type=["json"],
+        accept_multiple_files=True,
+        key="teacher_review_uploads",
+        help="Students should download their progress file after submitting. You can select several JSON files at once."
+    )
+    if not uploads:
+        st.info("No student files loaded yet. Have students submit their investigations, download their progress JSON files, then upload them here.")
+        return
+
+    records = []
+    errors = []
+    debate_lookup = {item["id"]: item for item in DEBATES}
+    for upload in uploads:
+        try:
+            payload = json.loads(upload.getvalue().decode("utf-8"))
+            claim_id = payload.get("claim")
+            state = payload.get("state")
+            debate = debate_lookup.get(claim_id)
+            if payload.get("format") != "sports-data-studio-resume" or not debate or not isinstance(state, dict):
+                raise ValueError("unsupported progress file")
+            grade = calculate_claim_math_grade(debate, state)
+            submitted = bool(state.get(f"v2_submitted_{claim_id}"))
+            records.append({
+                "file": upload.name,
+                "student": str(state.get(f"v2_author_{claim_id}") or "Unnamed student").strip(),
+                "class_period": str(state.get(f"v2_class_{claim_id}") or "—").strip(),
+                "claim": debate["question"],
+                "sport": debate["sport"],
+                "submitted": submitted,
+                "math_correct": f"{grade['correct']}/{grade['total']}" if grade else "—",
+                "suggested_math": grade["rubric_score"] if grade else 0,
+                "state": state,
+                "debate": debate,
+            })
+        except (UnicodeDecodeError, json.JSONDecodeError, TypeError, ValueError):
+            errors.append(upload.name)
+
+    if errors:
+        st.warning("These files could not be read: " + ", ".join(errors))
+    if not records:
+        st.error("No valid Sports Data Studio progress files were found.")
+        return
+
+    overview = pd.DataFrame([
+        {
+            "Student": row["student"],
+            "Class": row["class_period"],
+            "Sport": row["sport"],
+            "Submitted": "Yes" if row["submitted"] else "Not yet",
+            "Math": row["math_correct"],
+            "Suggested Math /4": row["suggested_math"],
+        }
+        for row in records
+    ])
+    st.dataframe(overview, use_container_width=True, hide_index=True)
+    st.download_button(
+        "⬇️ Download Class Review Summary (CSV)",
+        overview.to_csv(index=False).encode("utf-8"),
+        file_name="sports_data_studio_class_review.csv",
+        mime="text/csv",
+        use_container_width=True,
+        key="download_teacher_review_summary"
+    )
+
+    st.markdown("### Review individual submissions")
+    summary_rows = []
+    for index, row in enumerate(records):
+        label = f"{row['student']} · {row['class_period']} · {row['sport']}"
+        with st.expander(label, expanded=False):
+            st.write(f"**Claim:** {row['claim']}")
+            status = "Submitted" if row["submitted"] else "Draft / not submitted"
+            st.write(f"**Status:** {status} · **Automatic math check:** {row['math_correct']}")
+            c1, c2, c3, c4 = st.columns(4)
+            defaults = [0, row["suggested_math"], 0, 0]
+            labels = ["Research & Data", "Mathematical Process", "Statistical Interpretation", "Claim & Article"]
+            scores = []
+            for col, criterion, default in zip((c1, c2, c3, c4), labels, defaults):
+                with col:
+                    scores.append(st.number_input(criterion, min_value=0, max_value=4, value=int(default), step=1, key=f"teacher_score_{index}_{criterion}"))
+            feedback = st.text_area("Teacher feedback", key=f"teacher_feedback_{index}", height=80)
+            total = sum(scores)
+            st.success(f"Current rubric total: {total}/16")
+            summary_rows.append({
+                "Student": row["student"], "Class": row["class_period"], "Sport": row["sport"],
+                "Submitted": status, "Math Check": row["math_correct"],
+                "Research & Data": scores[0], "Mathematical Process": scores[1],
+                "Statistical Interpretation": scores[2], "Claim & Article": scores[3],
+                "Total /16": total, "Teacher Feedback": feedback,
+            })
+
+    if summary_rows:
+        st.download_button(
+            "⬇️ Download Scored Review CSV",
+            pd.DataFrame(summary_rows).to_csv(index=False).encode("utf-8"),
+            file_name="sports_data_studio_scored_reviews.csv",
+            mime="text/csv",
+            use_container_width=True,
+            key="download_scored_teacher_reviews"
+        )
+
+
 def parse_one_number(value):
     cleaned = str(value or "").replace(",", "").replace("%", "").strip()
     if not cleaned:
@@ -1026,9 +1132,10 @@ def math_directions(kind, lower_is_better=False):
     ]
 
 
-def calculate_claim_math_grade(debate):
+def calculate_claim_math_grade(debate, state=None):
     claim_id = debate["id"]
-    value = lambda key: str(st.session_state.get(key, "") or "").strip()
+    source_state = st.session_state if state is None else state
+    value = lambda key: str(source_state.get(key, "") or "").strip()
     items = []
 
     def add_item(label, key, expected, basic_hint, detailed_hint):
@@ -2370,6 +2477,7 @@ teacher_mode=st.toggle("🛠️ Teacher Mode",value=False)
 if teacher_mode:
     st.caption("Teacher Mode is a dedicated assignment builder. Turn it off to return to the student app.")
     render_assignment_controls(True, "Claim & Debate Lab")
+    render_teacher_review_dashboard()
     st.stop()
 
 mode=st.radio(
