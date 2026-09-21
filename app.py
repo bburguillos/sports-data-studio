@@ -1,5 +1,6 @@
 
 import math
+import random
 import statistics
 from collections import Counter
 
@@ -266,6 +267,375 @@ def prediction_section(mode_key,prompts,teacher_mode):
 
     return answers, bool(st.session_state.get(lock_key, False))
 
+
+DEBATES = [
+    {
+        "id":"nba_consistency_brunson_mitchell", "sport":"NBA", "kind":"consistency",
+        "a":"Jalen Brunson", "b":"Donovan Mitchell", "metric":"points scored", "unit":"points",
+        "question":"Who has been the more consistent scorer: Jalen Brunson or Donovan Mitchell?",
+        "research":["Points scored in each player's same 8–10 most recent completed games", "The date of every game", "Whether either player left a game early"],
+        "why":"Consistency requires game-by-game data. Season totals cannot show how much performances vary.",
+        "source_name":"NBA Stats", "source_url":"https://www.nba.com/stats/players/boxscores"
+    },
+    {
+        "id":"nba_typical_curry_edwards", "sport":"NBA", "kind":"typical",
+        "a":"Stephen Curry", "b":"Anthony Edwards", "metric":"points scored", "unit":"points",
+        "question":"Who has been the stronger typical scorer recently: Stephen Curry or Anthony Edwards?",
+        "research":["Points in the same number of recent games for both players", "Games played and dates", "Any unusually high or low scoring game"],
+        "why":"Mean and median describe a typical performance; checking outliers helps decide which is more representative.",
+        "source_name":"NBA Stats", "source_url":"https://www.nba.com/stats/players/boxscores"
+    },
+    {
+        "id":"nba_efficiency_jokic_giannis", "sport":"NBA", "kind":"efficiency",
+        "a":"Nikola Jokić", "b":"Giannis Antetokounmpo", "metric":"field goals", "unit":"field-goal percentage",
+        "question":"Who was the more efficient shooter over the same time period: Nikola Jokić or Giannis Antetokounmpo?",
+        "research":["Total field goals made during one shared period", "Total field goals attempted during that period", "Use regular-season data for both players"],
+        "why":"Efficiency compares makes to attempts. Total makes alone can favor the player who took more shots.",
+        "source_name":"NBA Stats", "source_url":"https://www.nba.com/stats/players/traditional"
+    },
+    {
+        "id":"wnba_consistency_wilson_collier", "sport":"WNBA", "kind":"consistency",
+        "a":"A'ja Wilson", "b":"Napheesa Collier", "metric":"points scored", "unit":"points",
+        "question":"Who has been the more consistent scorer: A'ja Wilson or Napheesa Collier?",
+        "research":["Points from the same 8–10 completed games", "Game dates", "Games with unusually low minutes"],
+        "why":"A smaller MAD means the game performances stayed closer to that player's average.",
+        "source_name":"WNBA Stats", "source_url":"https://stats.wnba.com/players/boxscores/"
+    },
+    {
+        "id":"nfl_consistency_allen_jackson", "sport":"NFL", "kind":"consistency",
+        "a":"Josh Allen", "b":"Lamar Jackson", "metric":"passing yards", "unit":"yards",
+        "question":"Who has been the more consistent passer: Josh Allen or Lamar Jackson?",
+        "research":["Passing yards from the same 6–10 regular-season weeks", "Bye weeks or missed games", "Whether partial games are included"],
+        "why":"Weekly data and MAD measure reliability better than one season total.",
+        "source_name":"NFL Player Stats", "source_url":"https://www.nfl.com/stats/player-stats/"
+    },
+    {
+        "id":"nfl_typical_jefferson_chase", "sport":"NFL", "kind":"typical",
+        "a":"Justin Jefferson", "b":"Ja'Marr Chase", "metric":"receiving yards", "unit":"yards",
+        "question":"Who has produced the stronger typical receiving game: Justin Jefferson or Ja'Marr Chase?",
+        "research":["Receiving yards from matching regular-season weeks", "Games played", "One-game highs and lows"],
+        "why":"Mean and median compare typical production while the full list reveals extreme games.",
+        "source_name":"NFL Player Stats", "source_url":"https://www.nfl.com/stats/player-stats/"
+    },
+    {
+        "id":"nfl_frequency_mahomes_burrow", "sport":"NFL", "kind":"frequency",
+        "a":"Patrick Mahomes", "b":"Joe Burrow", "metric":"games with 2+ passing touchdowns", "unit":"percent of games",
+        "question":"Who more frequently threw at least two touchdown passes?",
+        "research":["Number of qualifying games in the same season", "Total games played by each quarterback", "Use the same threshold and season"],
+        "why":"Relative frequency makes the comparison fair if the quarterbacks played different numbers of games.",
+        "source_name":"NFL Player Stats", "source_url":"https://www.nfl.com/stats/player-stats/"
+    },
+    {
+        "id":"mlb_efficiency_judge_ohtani", "sport":"MLB", "kind":"frequency",
+        "a":"Aaron Judge", "b":"Shohei Ohtani", "metric":"games with at least one hit", "unit":"percent of games",
+        "question":"Who recorded a hit in a greater percentage of games: Aaron Judge or Shohei Ohtani?",
+        "research":["Games with at least one hit during the same season or date range", "Total games played", "Use completed regular-season games"],
+        "why":"A percentage compares success fairly even when the players appeared in different numbers of games.",
+        "source_name":"MLB Stats", "source_url":"https://www.mlb.com/stats"
+    },
+    {
+        "id":"mlb_consistency_soto_ramirez", "sport":"MLB", "kind":"consistency",
+        "a":"Juan Soto", "b":"José Ramírez", "metric":"times reached base", "unit":"times on base",
+        "question":"Who has been more consistent at reaching base: Juan Soto or José Ramírez?",
+        "research":["Times reached base in the same 10 games", "At-bats or plate appearances in those games", "Any games the player did not start"],
+        "why":"The game-by-game list lets MAD show whose results varied less.",
+        "source_name":"MLB Stats", "source_url":"https://www.mlb.com/stats"
+    },
+    {
+        "id":"nhl_typical_mcdavid_mackinnon", "sport":"NHL", "kind":"typical",
+        "a":"Connor McDavid", "b":"Nathan MacKinnon", "metric":"points", "unit":"points",
+        "question":"Who has produced the stronger typical offensive game: Connor McDavid or Nathan MacKinnon?",
+        "research":["Points in the same 8–10 completed games", "Game dates", "Goals and assists if you need counterevidence"],
+        "why":"Mean and median compare typical point production without relying only on a season total.",
+        "source_name":"NHL Stats", "source_url":"https://www.nhl.com/stats/skaters"
+    },
+    {
+        "id":"nhl_efficiency_shesterkin_hellebuyck", "sport":"NHL", "kind":"efficiency",
+        "a":"Igor Shesterkin", "b":"Connor Hellebuyck", "metric":"saves", "unit":"save percentage",
+        "question":"Who was the more efficient goaltender over the same period: Igor Shesterkin or Connor Hellebuyck?",
+        "research":["Total saves in the shared period", "Total shots faced", "Use the same season and game type"],
+        "why":"Save percentage accounts for different numbers of shots faced.",
+        "source_name":"NHL Goalie Stats", "source_url":"https://www.nhl.com/stats/goalies"
+    },
+    {
+        "id":"soccer_efficiency_haaland_mbappe", "sport":"Soccer", "kind":"efficiency",
+        "a":"Erling Haaland", "b":"Kylian Mbappé", "metric":"shots converted into goals", "unit":"goal conversion percentage",
+        "question":"Who converted a greater percentage of shots into goals: Erling Haaland or Kylian Mbappé?",
+        "research":["Goals in one clearly named competition and season", "Total shots in that same competition", "Do not mix club and national-team data"],
+        "why":"Conversion percentage compares scoring efficiency instead of only total goals.",
+        "source_name":"UEFA Statistics", "source_url":"https://www.uefa.com/uefachampionsleague/statistics/"
+    },
+    {
+        "id":"f1_consistency_verstappen_norris", "sport":"Formula 1", "kind":"consistency",
+        "a":"Max Verstappen", "b":"Lando Norris", "metric":"finishing position", "unit":"place",
+        "question":"Who has been the more consistent finisher: Max Verstappen or Lando Norris?",
+        "research":["Finishing positions from the same races", "DNFs and how you will handle them", "Sprint and Grand Prix results should not be mixed"],
+        "why":"MAD measures consistency, but for finishing place a lower average is better. State how you treated DNFs.",
+        "source_name":"Formula 1 Results", "source_url":"https://www.formula1.com/en/results"
+    },
+    {
+        "id":"golf_typical_scheffler_mcilroy", "sport":"PGA", "kind":"typical_low",
+        "a":"Scottie Scheffler", "b":"Rory McIlroy", "metric":"round score", "unit":"strokes",
+        "question":"Who has posted the stronger typical round: Scottie Scheffler or Rory McIlroy?",
+        "research":["Round scores from the same number of recent completed rounds", "Tournament names and dates", "Whether course difficulty could affect the comparison"],
+        "why":"Golf scores are reversed: a lower mean or median is stronger.",
+        "source_name":"PGA TOUR Stats", "source_url":"https://www.pgatour.com/stats"
+    },
+]
+
+
+def parse_one_number(value):
+    cleaned = str(value or "").replace(",", "").replace("%", "").strip()
+    if not cleaned:
+        return None
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
+
+
+def pct_change(start, end):
+    if start in (None, 0) or end is None:
+        return None
+    return (end - start) / abs(start) * 100
+
+
+def claim_choice_label(choice, debate):
+    if choice == "Player A":
+        return debate["a"]
+    if choice == "Player B":
+        return debate["b"]
+    return "Not enough information yet"
+
+
+def choose_random_debate(valid_ids):
+    current = st.session_state.get("selected_debate_id")
+    choices = [x for x in valid_ids if x != current] or valid_ids
+    st.session_state["selected_debate_id"] = random.choice(choices)
+
+
+def render_claim_debate_lab(teacher_mode):
+    st.markdown("## 🗣️ Claim & Debate Lab")
+    st.write("Use real athlete data to build a claim, test it with math, and defend the conclusion.")
+
+    c1,c2 = st.columns([1,2])
+    with c1:
+        support = st.selectbox("Support level", ["Training Mode", "Coach Mode", "Independent Mode"])
+        sports = ["All Sports"] + sorted({d["sport"] for d in DEBATES})
+        sport = st.selectbox("Sport", sports)
+    pool = DEBATES if sport == "All Sports" else [d for d in DEBATES if d["sport"] == sport]
+    valid_ids = [d["id"] for d in pool]
+    if st.session_state.get("selected_debate_id") not in valid_ids:
+        st.session_state["selected_debate_id"] = valid_ids[0]
+    with c2:
+        selected_id = st.selectbox(
+            "Choose a real-player debate",
+            valid_ids,
+            key="selected_debate_id",
+            format_func=lambda x: next(d["question"] for d in DEBATES if d["id"] == x)
+        )
+        st.button(
+            "🎲 Give Me Another Debate",
+            use_container_width=True,
+            on_click=choose_random_debate,
+            args=(valid_ids,)
+        )
+
+    d = next(item for item in DEBATES if item["id"] == st.session_state["selected_debate_id"])
+    st.markdown(f"""
+    <div class="studio-card">
+      <div class="studio-step">{d['sport']} Investigation</div>
+      <h2 style="margin:.25rem 0 .45rem;">{d['question']}</h2>
+      <p style="margin:0;"><b>Players:</b> {d['a']} vs. {d['b']}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("### Step 1 — Make an initial claim")
+    initial = st.radio(
+        "Before researching, what do you predict?",
+        ["Player A", "Player B", "Not enough information yet"],
+        format_func=lambda x: claim_choice_label(x, d),
+        horizontal=True,
+        key=f"initial_{d['id']}"
+    )
+    initial_reason = st.text_area(
+        "Why is that your initial prediction?",
+        placeholder="This is a prediction, so it is okay if the evidence later changes your mind.",
+        key=f"initial_reason_{d['id']}", height=80
+    )
+
+    st.markdown("### Step 2 — Build the research plan")
+    if support == "Independent Mode":
+        st.info("Decide which data would directly measure the words in the debate question.")
+        student_plan = st.text_area("What will you research, and why is it relevant?", key=f"plan_{d['id']}")
+        with st.expander("Check the app's suggested research plan"):
+            for item in d["research"]:
+                st.write("• " + item)
+            st.write("**Why this works:** " + d["why"])
+    else:
+        st.markdown('<div class="studio-card">', unsafe_allow_html=True)
+        for item in d["research"]:
+            st.write("✅ " + item)
+        st.write("**Why these numbers matter:** " + d["why"])
+        st.markdown('</div>', unsafe_allow_html=True)
+        student_plan = "; ".join(d["research"])
+    st.markdown(f"**Research source:** [{d['source_name']}]({d['source_url']})")
+    st.caption("Record the season or date range. Both athletes must use the same period and type of games.")
+    period = st.text_input("Season or exact date range", placeholder="Example: 2025–26 regular season, games through March 1", key=f"period_{d['id']}")
+
+    st.markdown("### Step 3 — Enter the real data")
+    result = None
+    evidence_lines = []
+    fair_sample = True
+
+    if d["kind"] in ("typical", "typical_low", "consistency"):
+        a_col,b_col = st.columns(2)
+        with a_col:
+            raw_a = st.text_area(f"{d['a']} — game-by-game {d['metric']}", placeholder="Enter values separated by commas or new lines", key=f"debate_a_{d['id']}", height=150)
+        with b_col:
+            raw_b = st.text_area(f"{d['b']} — game-by-game {d['metric']}", placeholder="Enter values separated by commas or new lines", key=f"debate_b_{d['id']}", height=150)
+        a_vals,a_bad = parse_numeric_text(raw_a)
+        b_vals,b_bad = parse_numeric_text(raw_b)
+        if a_bad or b_bad:
+            st.warning("Some entries were not numbers and were ignored.")
+        if a_vals and b_vals:
+            fair_sample = len(a_vals) == len(b_vals)
+            if not fair_sample:
+                st.warning(f"Fair-comparison check: {d['a']} has {len(a_vals)} values and {d['b']} has {len(b_vals)}. Use matching sample sizes if possible.")
+            if min(len(a_vals),len(b_vals)) < 5:
+                st.warning("Your sample is small. Try to collect at least 5 games; 8–10 is stronger.")
+            sa,sb = numerical_summary(a_vals),numerical_summary(b_vals)
+            st.markdown("### Step 4 — Do the math")
+            table = pd.DataFrame({
+                "Measure":["Games", "Mean", "Median", "Range", "MAD"],
+                d["a"]:[fmt(sa["n"]),fmt(sa["mean"]),fmt(sa["median"]),fmt(sa["range"]),fmt(sa["mad"])],
+                d["b"]:[fmt(sb["n"]),fmt(sb["mean"]),fmt(sb["median"]),fmt(sb["range"]),fmt(sb["mad"])],
+            })
+            st.dataframe(table,use_container_width=True,hide_index=True)
+            if d["kind"] == "consistency":
+                winner = d["a"] if sa["mad"] < sb["mad"] else d["b"] if sb["mad"] < sa["mad"] else "Tie"
+                evidence_lines = [f"{d['a']} MAD: {fmt(sa['mad'])} {d['unit']}", f"{d['b']} MAD: {fmt(sb['mad'])} {d['unit']}"]
+                result = f"{winner} is more consistent because the smaller MAD shows performances were closer to the player's mean." if winner != "Tie" else "The players have equal MADs in this sample."
+                if support == "Training Mode":
+                    st.info("MAD means mean absolute deviation. For consistency, **smaller MAD = more consistent**.")
+            else:
+                center = st.radio("Which measure best represents a typical performance?", ["Mean", "Median"], horizontal=True, key=f"center_{d['id']}")
+                av = sa[center.lower()]; bv = sb[center.lower()]
+                lower_is_better = d["kind"] == "typical_low"
+                if av == bv:
+                    winner = "Tie"
+                elif (av < bv) == lower_is_better:
+                    winner = d["a"]
+                else:
+                    winner = d["b"]
+                evidence_lines = [f"{d['a']} {center.lower()}: {fmt(av)} {d['unit']}", f"{d['b']} {center.lower()}: {fmt(bv)} {d['unit']}"]
+                direction = "lower" if lower_is_better else "higher"
+                result = f"{winner} has the stronger typical result because the {center.lower()} is {direction}." if winner != "Tie" else f"The players have the same {center.lower()} in this sample."
+                if support == "Training Mode":
+                    st.info("Use the median when an extreme game pulls the mean away from most performances. Otherwise, the mean uses every value.")
+            with st.expander("See the game-by-game comparison graph"):
+                st.pyplot(make_box([a_vals,b_vals],[d["a"],d["b"]],d["question"],d["unit"]))
+
+    elif d["kind"] == "efficiency":
+        a_col,b_col = st.columns(2)
+        with a_col:
+            st.markdown(f"**{d['a']}**")
+            a_made = parse_one_number(st.text_input("Successful outcomes", key=f"a_made_{d['id']}", placeholder="Example: shots made or saves"))
+            a_attempt = parse_one_number(st.text_input("Total attempts/opportunities", key=f"a_att_{d['id']}", placeholder="Example: shots attempted or shots faced"))
+        with b_col:
+            st.markdown(f"**{d['b']}**")
+            b_made = parse_one_number(st.text_input("Successful outcomes", key=f"b_made_{d['id']}", placeholder="Example: shots made or saves"))
+            b_attempt = parse_one_number(st.text_input("Total attempts/opportunities", key=f"b_att_{d['id']}", placeholder="Example: shots attempted or shots faced"))
+        if all(x is not None for x in [a_made,a_attempt,b_made,b_attempt]):
+            if a_attempt <= 0 or b_attempt <= 0 or a_made > a_attempt or b_made > b_attempt:
+                st.error("Check the data: attempts must be positive and successes cannot exceed attempts.")
+            else:
+                ap,bp = a_made/a_attempt*100,b_made/b_attempt*100
+                winner = d["a"] if ap > bp else d["b"] if bp > ap else "Tie"
+                st.markdown("### Step 4 — Do the math")
+                st.latex(r"\text{percentage}=\frac{\text{successful outcomes}}{\text{total opportunities}}\times100")
+                c1,c2 = st.columns(2); c1.metric(d["a"],f"{ap:.1f}%"); c2.metric(d["b"],f"{bp:.1f}%")
+                evidence_lines = [f"{d['a']}: {a_made:g}/{a_attempt:g} = {ap:.1f}%", f"{d['b']}: {b_made:g}/{b_attempt:g} = {bp:.1f}%"]
+                result = f"{winner} has the higher rate by {abs(ap-bp):.1f} percentage points." if winner != "Tie" else "The players have equal percentages."
+
+    elif d["kind"] == "frequency":
+        a_col,b_col = st.columns(2)
+        with a_col:
+            st.markdown(f"**{d['a']}**")
+            a_success = parse_one_number(st.text_input("Games meeting the condition", key=f"a_success_{d['id']}"))
+            a_total = parse_one_number(st.text_input("Total games", key=f"a_total_{d['id']}"))
+        with b_col:
+            st.markdown(f"**{d['b']}**")
+            b_success = parse_one_number(st.text_input("Games meeting the condition", key=f"b_success_{d['id']}"))
+            b_total = parse_one_number(st.text_input("Total games", key=f"b_total_{d['id']}"))
+        if all(x is not None for x in [a_success,a_total,b_success,b_total]):
+            if a_total <= 0 or b_total <= 0 or a_success > a_total or b_success > b_total:
+                st.error("Check the data: total games must be positive and qualifying games cannot exceed total games.")
+            else:
+                ap,bp = a_success/a_total*100,b_success/b_total*100
+                winner = d["a"] if ap > bp else d["b"] if bp > ap else "Tie"
+                st.markdown("### Step 4 — Do the math")
+                st.latex(r"\text{relative frequency}=\frac{\text{qualifying games}}{\text{total games}}\times100")
+                c1,c2=st.columns(2); c1.metric(d["a"],f"{ap:.1f}%"); c2.metric(d["b"],f"{bp:.1f}%")
+                evidence_lines = [f"{d['a']}: {a_success:g}/{a_total:g} = {ap:.1f}%", f"{d['b']}: {b_success:g}/{b_total:g} = {bp:.1f}%"]
+                result = f"{winner} met the condition more often by {abs(ap-bp):.1f} percentage points." if winner != "Tie" else "The players have equal relative frequencies."
+
+    if result:
+        st.markdown("### Step 5 — Decide what the evidence means")
+        st.success(result)
+        st.write("**Evidence collected:**")
+        for line in evidence_lines:
+            st.write("• " + line)
+        evidence_rating = st.radio(
+            "How does this evidence affect your original claim?",
+            ["Supports it", "Partially supports it", "Contradicts it", "Not enough evidence"],
+            horizontal=True, key=f"rating_{d['id']}"
+        )
+        limitation = st.text_area(
+            "Name one limitation or piece of counterevidence.",
+            placeholder="Examples: small sample, different opponents, an outlier, minutes played, course difficulty…",
+            key=f"limitation_{d['id']}", height=85
+        )
+
+        st.markdown("### Step 6 — Build and defend the final claim")
+        final_claim = st.text_area(
+            "Final argument",
+            placeholder=f"I claim ___ because the data shows ___. This matters because ___. One limitation is ___; however, ___.",
+            key=f"final_{d['id']}", height=150
+        )
+        challenge_map = {
+            "consistency":f"You used MAD to discuss consistency. Does {winner} also have a strong mean, or could the player be consistently lower?",
+            "typical":f"Would your conclusion change if you used the other measure of center or removed an outlier?",
+            "typical_low":f"Could course difficulty explain some of the difference in round scores?",
+            "efficiency":f"Does the higher percentage come from enough attempts to be convincing? Defend your sample size.",
+            "frequency":f"Is the chosen condition the fairest definition of success, or would another threshold change the conclusion?",
+        }
+        st.markdown("#### 🎤 Challenge My Argument")
+        st.warning(challenge_map[d["kind"]])
+        defense = st.text_area("Your response to the opposing analyst", key=f"defense_{d['id']}", height=110)
+
+        checklist = {
+            "Initial prediction": bool(initial_reason.strip()),
+            "Time period identified": bool(period.strip()),
+            "Fair sample sizes": fair_sample,
+            "Counterevidence considered": bool(limitation.strip()),
+            "Final argument written": bool(final_claim.strip()),
+            "Challenge answered": bool(defense.strip()),
+        }
+        completed = sum(checklist.values())
+        st.progress(completed/len(checklist), text=f"Investigation checklist: {completed}/{len(checklist)} complete")
+        if teacher_mode or completed == len(checklist):
+            report = "\n".join([
+                "SPORTS DATA STUDIO — CLAIM & DEBATE LAB", "",
+                f"Question: {d['question']}", f"Period: {period}",
+                f"Initial claim: {claim_choice_label(initial,d)}", f"Initial reasoning: {initial_reason}", "",
+                "Evidence:", *[f"- {x}" for x in evidence_lines], f"Math interpretation: {result}",
+                f"Evidence rating: {evidence_rating}", f"Limitation/counterevidence: {limitation}", "",
+                f"Final argument: {final_claim}", f"Challenge: {challenge_map[d['kind']]}", f"Defense: {defense}", "",
+                f"Data source: {d['source_name']} — {d['source_url']}"
+            ])
+            st.download_button("⬇️ Download Investigation Report", report, file_name=f"claim_debate_{d['id']}.txt", mime="text/plain", use_container_width=True)
+
 st.markdown("""
 <div class="studio-card">
   <div class="studio-step">Sports by the Numbers</div>
@@ -278,7 +648,7 @@ top1,top2=st.columns([2,1])
 with top1:
     mode=st.radio(
         "Choose a Data Studio mode",
-        ["Analyze One Data Set","Compare Two Groups","Change Over Time","Categorical Data"],
+        ["Claim & Debate Lab","Analyze One Data Set","Compare Two Groups","Change Over Time","Categorical Data"],
         horizontal=True
     )
 with top2:
@@ -292,10 +662,16 @@ elif st.session_state["last_studio_mode"] != mode:
     st.session_state["last_studio_mode"] = mode
 
 
-dataset_name=st.text_input("Dataset / activity name",placeholder="Example: 40-Yard Dash")
-unit=st.text_input("Unit",placeholder="Example: seconds, points, inches")
+dataset_name=""
+unit=""
+if mode != "Claim & Debate Lab":
+    dataset_name=st.text_input("Dataset / activity name",placeholder="Example: 40-Yard Dash")
+    unit=st.text_input("Unit",placeholder="Example: seconds, points, inches")
 
-if mode=="Analyze One Data Set":
+if mode=="Claim & Debate Lab":
+    render_claim_debate_lab(teacher_mode)
+
+elif mode=="Analyze One Data Set":
     st.markdown("## Analyze One Data Set")
     raw=st.text_area("Paste or type your data",height=170,placeholder="6.2\n6.8\n7.1\n6.4\n7.5\n6.9")
     values,bad=parse_numeric_text(raw)
