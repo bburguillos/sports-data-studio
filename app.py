@@ -234,6 +234,27 @@ section[data-testid="stMain"] {
     border:2px solid #2563eb;
     color:#1e3a8a !important;
 }
+.floating-save-button {
+    position:fixed;
+    right:18px;
+    bottom:18px;
+    z-index:9999;
+    display:inline-block;
+    padding:.72rem 1rem;
+    border-radius:999px;
+    background:#1d4ed8 !important;
+    border:2px solid #93c5fd;
+    box-shadow:0 6px 18px rgba(15,23,42,.25);
+    color:#ffffff !important;
+    font-weight:850;
+    text-decoration:none !important;
+    font-size:.9rem;
+}
+.floating-save-button:hover,
+.floating-save-button:focus {
+    background:#1e40af !important;
+    color:#ffffff !important;
+}
 
 /* iPhone/iPad layout: large tap targets, readable form text, and controlled
    wrapping without changing any classroom calculations or saved content. */
@@ -320,6 +341,12 @@ svg {
         align-items:center !important;
     }
     .progress-grid {grid-template-columns:repeat(2,minmax(0,1fr));}
+    .floating-save-button {
+        right:12px;
+        bottom:max(12px, env(safe-area-inset-bottom));
+        padding:.68rem .85rem;
+        font-size:.84rem;
+    }
 }
 
 @media (max-width: 480px) {
@@ -1119,6 +1146,78 @@ def render_submitted_math_review(grade):
             st.write(f"❌ **{item['label']}** — entered {item['entered']}; correct result: {fmt(item['expected'])}. {item['basic_hint']}")
 
 
+def build_resume_payload(debate):
+    claim_id = debate["id"]
+    saved_state = {}
+    for key, value in st.session_state.items():
+        if key.endswith(f"_{claim_id}") or key in {"v2_support", "v2_sport", "v2_selected_debate_id"}:
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                saved_state[key] = value
+    assignment = st.session_state.get("active_assignment")
+    if not isinstance(assignment, dict):
+        assignment = None
+    return {
+        "format": "sports-data-studio-resume",
+        "version": 1,
+        "claim": claim_id,
+        "assignment": assignment,
+        "state": saved_state,
+    }
+
+
+def apply_pending_resume():
+    pending = st.session_state.pop("pending_resume", None)
+    if not pending:
+        return
+    claim_ids = {debate["id"] for debate in DEBATES}
+    claim_id = pending.get("claim")
+    if claim_id not in claim_ids or not isinstance(pending.get("state"), dict):
+        st.session_state["resume_notice"] = "This resume file is not a valid Sports Data Studio investigation."
+        return
+    for key, value in pending["state"].items():
+        st.session_state[key] = value
+    assignment = pending.get("assignment")
+    if isinstance(assignment, dict) and assignment.get("claim") in claim_ids:
+        st.session_state["active_assignment"] = assignment
+    else:
+        st.session_state.pop("active_assignment", None)
+    st.session_state["v2_selected_debate_id"] = claim_id
+    st.session_state["resume_notice"] = "Your saved investigation was restored."
+
+
+def render_resume_controls(debate):
+    st.markdown(
+        '<div id="save-resume-panel"></div>'
+        '<a class="floating-save-button" href="#save-resume-panel">💾 Save Progress</a>',
+        unsafe_allow_html=True
+    )
+    with st.expander("💾 Save & Resume This Investigation"):
+        st.caption("Download your progress before leaving. Uploaded player photos are not included and can be added again when you resume.")
+        payload = build_resume_payload(debate)
+        st.download_button(
+            "⬇️ Download Progress File",
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            file_name=f"sports_data_resume_{debate['id']}.json",
+            mime="application/json",
+            use_container_width=True,
+            key=f"download_resume_{debate['id']}"
+        )
+        uploaded = st.file_uploader(
+            "Upload a previous progress file",
+            type=["json"],
+            key=f"upload_resume_{debate['id']}"
+        )
+        if uploaded is not None and st.button("↩️ Restore Saved Investigation", key=f"restore_resume_{debate['id']}", use_container_width=True):
+            try:
+                candidate = json.loads(uploaded.getvalue().decode("utf-8"))
+                if candidate.get("format") != "sports-data-studio-resume" or candidate.get("version") != 1:
+                    raise ValueError("unsupported format")
+                st.session_state["pending_resume"] = candidate
+                st.rerun()
+            except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+                st.error("That file could not be restored. Upload a progress file downloaded from this app.")
+
+
 def claim_progress_snapshot(debate, support):
     claim_id = debate["id"]
     value = lambda key: str(st.session_state.get(key, "") or "").strip()
@@ -1571,6 +1670,7 @@ def render_claim_debate_lab(teacher_mode):
 
 
 def render_claim_debate_lab_v2(teacher_mode):
+    apply_pending_resume()
     st.markdown("## 🗣️ Claim & Debate Lab")
     st.write("Research real athlete data, complete your own calculations, and defend the conclusion like a sports reporter.")
 
@@ -1611,7 +1711,11 @@ def render_claim_debate_lab_v2(teacher_mode):
     </div>
     """, unsafe_allow_html=True)
 
+    resume_notice = st.session_state.pop("resume_notice", None)
+    if resume_notice:
+        st.success(resume_notice)
     render_claim_progress(d, support)
+    render_resume_controls(d)
 
     st.markdown("### Step 1 — Make an initial claim")
     initial = st.radio(
@@ -2257,7 +2361,7 @@ st.markdown("""
   <div class="studio-step">Sports by the Numbers</div>
   <h1 style="margin:.2rem 0 .35rem;">📊 Sports Data Studio</h1>
   <p style="margin:0;">Enter it. Graph it. Analyze it. Defend it.</p>
-  <span class="build-badge">PDF Rubric + Progress Tracker build 2026.09.21</span>
+            <span class="build-badge">Floating Save + Resume build 2026.09.21</span>
 </div>
 """,unsafe_allow_html=True)
 
