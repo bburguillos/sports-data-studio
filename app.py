@@ -22,31 +22,54 @@ st.set_page_config(page_title="Sports Data Studio", page_icon="📊", layout="wi
 
 st.markdown("""
 <style>
+:root {
+    color-scheme: light !important;
+    --background-color: #f4f8ff !important;
+    --secondary-background-color: #ffffff !important;
+    --text-color: #0b1220 !important;
+    --primary-color: #1d4ed8 !important;
+}
 .stApp {
     background:
-        radial-gradient(circle at top right, rgba(37,99,235,.10), transparent 30%),
-        linear-gradient(180deg,#071426 0%,#0c1b31 100%);
-    color:#f8fafc;
+        radial-gradient(circle at top right, rgba(59,130,246,.16), transparent 34%),
+        linear-gradient(180deg,#f8fbff 0%,#e8f1ff 100%);
+    color:#0f172a;
 }
 .block-container {padding-top:1.6rem; max-width:1200px;}
-h1,h2,h3 {color:#ffffff;}
+h1,h2,h3,h4 {color:#0f2747 !important;}
+.stApp p,
+.stApp li,
+.stApp label,
+.stApp [data-testid="stMarkdownContainer"],
+.stApp [data-testid="stWidgetLabel"] p,
+.stApp [data-testid="stText"] {
+    color:#172033 !important;
+}
+.stApp [data-testid="stWidgetLabel"] p {font-weight:700 !important;}
+.stApp [data-testid="stCaptionContainer"] p,
+.stApp small {color:#40516b !important;}
+.stApp a {color:#1d4ed8 !important; font-weight:650;}
 .studio-card {
-    background:rgba(15,39,71,.94);
-    border:1px solid rgba(96,165,250,.38);
+    background:#ffffff;
+    color:#0f172a;
+    border:2px solid #93c5fd;
     border-radius:16px;
     padding:16px 18px;
     margin:8px 0 16px;
+    box-shadow:0 8px 22px rgba(30,64,175,.08);
 }
+.studio-card p,.studio-card b {color:#172033 !important;}
 .studio-step {
     font-size:.78rem;
     letter-spacing:.09em;
     font-weight:900;
-    color:#93c5fd;
+    color:#1d4ed8;
     text-transform:uppercase;
 }
 .prediction-box {
-    background:rgba(30,64,175,.16);
-    border:1px solid rgba(96,165,250,.28);
+    background:#eff6ff;
+    color:#0f172a;
+    border:2px solid #bfdbfe;
     border-radius:14px;
     padding:12px 14px;
     margin-bottom:12px;
@@ -65,12 +88,121 @@ div[data-testid="stDownloadButton"] > button * {color:#ffffff !important;}
 input, textarea, [data-baseweb="select"] > div {
     background:#ffffff !important;
     color:#111827 !important;
+    border-color:#64748b !important;
 }
+input::placeholder, textarea::placeholder {color:#64748b !important; opacity:1 !important;}
 div[data-testid="stMetric"] {
-    background:rgba(255,255,255,.05);
-    border:1px solid rgba(148,163,184,.18);
+    background:#ffffff;
+    border:1px solid #94a3b8;
     border-radius:12px;
     padding:10px 12px;
+}
+div[data-testid="stMetric"] * {color:#0f172a !important;}
+div[data-testid="stExpander"] {
+    background:#ffffff;
+    border:1px solid #94a3b8 !important;
+    border-radius:12px;
+}
+div[data-testid="stAlert"] p,
+div[data-testid="stAlert"] li,
+div[data-testid="stAlert"] span {color:#172033 !important;}
+div[data-testid="stFileUploaderDropzone"] {background:#ffffff !important; border-color:#64748b !important;}
+hr {border-color:#94a3b8 !important;}
+
+/* Force the light palette even when a viewer or deployment has dark mode active. */
+html, body, #root,
+[data-testid="stApp"],
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+[data-testid="stMainBlockContainer"],
+section.main,
+.main,
+.stApp {
+    background-color:#f4f8ff !important;
+    color:#0b1220 !important;
+    color-scheme:light !important;
+}
+[data-testid="stHeader"] {background:rgba(244,248,255,.96) !important;}
+[data-testid="stToolbar"] {background:#ffffff !important; color:#0b1220 !important;}
+[data-testid="stAppViewContainer"] p,
+[data-testid="stAppViewContainer"] li,
+[data-testid="stAppViewContainer"] label,
+[data-testid="stAppViewContainer"] span,
+[data-testid="stAppViewContainer"] summary,
+[data-testid="stAppViewContainer"] div[data-testid="stCaptionContainer"] p,
+[data-testid="stAppViewContainer"] div[data-testid="stMarkdownContainer"] p {
+    color:#0b1220 !important;
+}
+[data-testid="stAppViewContainer"] div[data-testid="stCaptionContainer"] p {
+    color:#334155 !important;
+    font-weight:550 !important;
+}
+[data-testid="stAppViewContainer"] div.stButton button,
+[data-testid="stAppViewContainer"] div.stButton button span,
+[data-testid="stAppViewContainer"] div[data-testid="stDownloadButton"] button,
+[data-testid="stAppViewContainer"] div[data-testid="stDownloadButton"] button span {
+    color:#ffffff !important;
+}
+[data-testid="stAppViewContainer"] input,
+[data-testid="stAppViewContainer"] textarea,
+[data-testid="stAppViewContainer"] [data-baseweb="select"] div {
+    background-color:#ffffff !important;
+    color:#0b1220 !important;
+}
+
+/* Streamlit can restore a viewer's dark preference after the app begins.
+   Target the current app containers and controls directly so that cannot
+   create dark-on-dark labels. */
+body,
+body > div,
+#root,
+#root > div,
+.stApp,
+[data-testid="stApp"],
+[data-testid="stAppViewContainer"],
+[data-testid="stMain"],
+section[data-testid="stMain"] {
+    background:#f4f8ff !important;
+    background-color:#f4f8ff !important;
+    background-image:none !important;
+}
+[data-testid="stMainBlockContainer"],
+.block-container {
+    background:transparent !important;
+}
+[data-testid="stRadio"] label,
+[data-testid="stRadio"] label p,
+[data-testid="stRadio"] label span,
+[data-testid="stCheckbox"] label,
+[data-testid="stCheckbox"] label p,
+[data-testid="stCheckbox"] label span,
+[data-testid="stToggle"] label,
+[data-testid="stToggle"] label p,
+[data-testid="stToggle"] label span,
+[data-testid="stWidgetLabel"],
+[data-testid="stWidgetLabel"] p,
+[role="radiogroup"] label,
+[role="radiogroup"] label p,
+[role="radiogroup"] label span {
+    color:#0b1220 !important;
+    opacity:1 !important;
+    -webkit-text-fill-color:#0b1220 !important;
+}
+[data-baseweb="radio"] > div:first-child,
+[data-baseweb="checkbox"] > div:first-child {
+    background-color:#ffffff !important;
+    border-color:#475569 !important;
+}
+.build-badge {
+    display:inline-block;
+    margin-top:.65rem;
+    padding:.18rem .55rem;
+    border-radius:999px;
+    background:#dbeafe;
+    color:#1e3a8a !important;
+    font-size:.72rem;
+    font-weight:800;
+    letter-spacing:.02em;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -1402,6 +1534,30 @@ def render_categorical_frequency_lab_v2(teacher_mode):
             table.loc[len(table)] = ["Total",total,1.0,"100.0%"]
             st.markdown("### Step 2 — Completed one-way frequency table")
             st.dataframe(table,use_container_width=True,hide_index=True)
+            st.markdown("### 🧠 Percentage Interpretation Coach")
+            chosen_category = st.selectbox(
+                "Choose one category to interpret",
+                categories,key="oneway_interpret_category"
+            )
+            chosen_index = categories.index(chosen_category)
+            chosen_count = final_counts[chosen_index]
+            chosen_percent = chosen_count/total*100
+            st.info(
+                f"**{chosen_percent:.1f}%** means that **{chosen_count} out of {total} responses** were "
+                f"**{chosen_category}**. If there were exactly 100 similar responses, about "
+                f"**{chosen_percent:.0f} out of 100** would be {chosen_category}."
+            )
+            if chosen_percent > 50:
+                st.write(f"**More than half:** {chosen_category} represents a majority of the responses because {chosen_percent:.1f}% is greater than 50%.")
+            elif chosen_percent == 50:
+                st.write(f"**Exactly half:** {chosen_category} represents 50% of the responses.")
+            else:
+                st.write(f"**Less than half:** {chosen_category} is not a majority because {chosen_percent:.1f}% is below 50%.")
+            st.text_area(
+                "Finish the interpretation",
+                placeholder=f"The percentage of responses in the {chosen_category} category suggests that...",
+                key="oneway_interpret_finish",height=80
+            )
             st.text_area("Write a claim supported by at least one frequency or percentage.", key="oneway_grid_claim", height=100)
             st.text_area("Explain why the evidence supports your claim.", key="oneway_grid_reason", height=90)
 
@@ -1493,6 +1649,43 @@ def render_categorical_frequency_lab_v2(teacher_mode):
                 pct = count_table/grand_total*100
                 st.dataframe(pct.round(1).astype(str)+"%",use_container_width=True)
                 st.caption("The entire table represents 100%.")
+
+            st.markdown("### 🧠 Percentage Interpretation Coach")
+            choose1,choose2 = st.columns(2)
+            with choose1:
+                chosen_row = st.selectbox(f"Choose a {row_name or 'row'} category",row_labels,key="twoway_interpret_row")
+            with choose2:
+                chosen_column = st.selectbox(f"Choose a {column_name or 'column'} category",column_labels,key="twoway_interpret_column")
+            cell_count = int(count_table.loc[chosen_row,chosen_column])
+            row_total_value = int(count_table.loc[chosen_row].sum())
+            column_total_value = int(count_table[chosen_column].sum())
+            if percent_view == "Row percentages":
+                interpreted_percent = cell_count/row_total_value*100 if row_total_value else 0
+                explanation = (
+                    f"Among all **{chosen_row}** responses, **{cell_count} out of {row_total_value}** were "
+                    f"**{chosen_column}**. That is **{interpreted_percent:.1f}%**. The denominator is the {chosen_row} row total."
+                )
+                sentence_starter = f"Among {chosen_row} responses, {interpreted_percent:.1f}% were {chosen_column}. This suggests that..."
+            elif percent_view == "Column percentages":
+                interpreted_percent = cell_count/column_total_value*100 if column_total_value else 0
+                explanation = (
+                    f"Among all **{chosen_column}** responses, **{cell_count} out of {column_total_value}** were "
+                    f"**{chosen_row}**. That is **{interpreted_percent:.1f}%**. The denominator is the {chosen_column} column total."
+                )
+                sentence_starter = f"Among {chosen_column} responses, {interpreted_percent:.1f}% were {chosen_row}. This suggests that..."
+            else:
+                interpreted_percent = cell_count/grand_total*100
+                explanation = (
+                    f"Of all **{grand_total} responses** in the table, **{cell_count}** were both "
+                    f"**{chosen_row}** and **{chosen_column}**. That is **{interpreted_percent:.1f}%** of the entire data set."
+                )
+                sentence_starter = f"Overall, {interpreted_percent:.1f}% of responses were both {chosen_row} and {chosen_column}. This suggests that..."
+            st.info(explanation)
+            st.caption("The app explains what the percentage literally means. You still decide what pattern it supports.")
+            st.text_area(
+                "Finish the interpretation",
+                placeholder=sentence_starter,key="twoway_interpret_finish",height=85
+            )
             st.markdown("### Step 4 — Make and defend a categorical claim")
             st.text_area("Identify the greatest joint frequency and its row/column categories.", key="twoway_grid_joint", height=85)
             st.text_area("Compare at least two rows or columns using counts or percentages.", key="twoway_grid_compare", height=95)
@@ -1503,6 +1696,7 @@ st.markdown("""
   <div class="studio-step">Sports by the Numbers</div>
   <h1 style="margin:.2rem 0 .35rem;">📊 Sports Data Studio</h1>
   <p style="margin:0;">Enter it. Graph it. Analyze it. Defend it.</p>
+  <span class="build-badge">Light UI build 2026.09.21</span>
 </div>
 """,unsafe_allow_html=True)
 
