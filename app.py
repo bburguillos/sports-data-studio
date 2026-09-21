@@ -3,11 +3,20 @@ import math
 import random
 import statistics
 from collections import Counter
+from datetime import date
+from html import escape
+from io import BytesIO
 
 import numpy as np
 import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.utils import ImageReader
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, PageBreak
 
 st.set_page_config(page_title="Sports Data Studio", page_icon="📊", layout="wide")
 
@@ -383,6 +392,37 @@ DEBATES = [
     },
 ]
 
+# Additional real-player investigations. These expand the choice bank while
+# keeping every question tied to one teachable statistical comparison.
+DEBATES += [
+    {"id":"nba_typical_doncic_sga","sport":"NBA","kind":"typical","a":"Luka Dončić","b":"Shai Gilgeous-Alexander","metric":"points scored","unit":"points","question":"Who has produced the stronger typical scoring game: Luka Dončić or Shai Gilgeous-Alexander?","research":["Points from the same 8–10 completed games","Dates and games played","Any unusually high or low performance"],"why":"Mean and median can describe a typical game, while the full list reveals possible outliers.","source_name":"NBA Stats","source_url":"https://www.nba.com/stats/players/boxscores"},
+    {"id":"nba_consistency_wemby_chet","sport":"NBA","kind":"consistency","a":"Victor Wembanyama","b":"Chet Holmgren","metric":"blocks","unit":"blocks","question":"Who has been the more consistent shot blocker: Victor Wembanyama or Chet Holmgren?","research":["Blocks in the same number of recent games","Minutes played in each game","Games missed or left early"],"why":"Game-by-game data and MAD show how much each player's block totals vary.","source_name":"NBA Stats","source_url":"https://www.nba.com/stats/players/boxscores"},
+    {"id":"nba_frequency_curry_lillard","sport":"NBA","kind":"frequency","a":"Stephen Curry","b":"Damian Lillard","metric":"games with 3+ made three-pointers","unit":"percent of games","question":"Who made at least three three-pointers in a greater percentage of games: Stephen Curry or Damian Lillard?","research":["Games with at least three made threes in one shared period","Total games played in that period","Use regular-season games for both"],"why":"Relative frequency makes the comparison fair when the players have different game totals.","source_name":"NBA Stats","source_url":"https://www.nba.com/stats/players/boxscores"},
+    {"id":"wnba_typical_clark_ionescu","sport":"WNBA","kind":"typical","a":"Caitlin Clark","b":"Sabrina Ionescu","metric":"assists","unit":"assists","question":"Who has produced the stronger typical passing game: Caitlin Clark or Sabrina Ionescu?","research":["Assists from the same 8–10 games","Game dates","Minutes played and possible outliers"],"why":"Mean and median help compare typical assist production.","source_name":"WNBA Stats","source_url":"https://stats.wnba.com/players/boxscores/"},
+    {"id":"wnba_efficiency_wilson_stewart","sport":"WNBA","kind":"efficiency","a":"A'ja Wilson","b":"Breanna Stewart","metric":"field goals","unit":"field-goal percentage","question":"Who was the more efficient shooter over the same period: A'ja Wilson or Breanna Stewart?","research":["Total field goals made","Total field goals attempted","Use the same season or date range"],"why":"Made shots divided by attempts measures shooting efficiency.","source_name":"WNBA Stats","source_url":"https://stats.wnba.com/players/traditional/"},
+    {"id":"wnba_consistency_thomas_clark","sport":"WNBA","kind":"consistency","a":"Alyssa Thomas","b":"Caitlin Clark","metric":"assists","unit":"assists","question":"Who has been the more consistent playmaker: Alyssa Thomas or Caitlin Clark?","research":["Assists from matching recent games","Minutes played","Any game with limited playing time"],"why":"MAD measures how closely each player's assist totals cluster around the mean.","source_name":"WNBA Stats","source_url":"https://stats.wnba.com/players/boxscores/"},
+    {"id":"nfl_typical_barkley_mccaffrey","sport":"NFL","kind":"typical","a":"Saquon Barkley","b":"Christian McCaffrey","metric":"rushing yards","unit":"yards","question":"Who has produced the stronger typical rushing game: Saquon Barkley or Christian McCaffrey?","research":["Rushing yards from the same number of games","Games played and dates","Unusually high or low games"],"why":"Mean and median compare typical production without relying on season totals alone.","source_name":"NFL Player Stats","source_url":"https://www.nfl.com/stats/player-stats/"},
+    {"id":"nfl_consistency_jefferson_lamb","sport":"NFL","kind":"consistency","a":"Justin Jefferson","b":"CeeDee Lamb","metric":"receptions","unit":"receptions","question":"Who has been the more consistent pass catcher: Justin Jefferson or CeeDee Lamb?","research":["Receptions from the same 6–10 weeks","Bye weeks and missed games","Partial games caused by injury"],"why":"MAD and range describe variation from week to week.","source_name":"NFL Player Stats","source_url":"https://www.nfl.com/stats/player-stats/"},
+    {"id":"nfl_efficiency_tucker_butker","sport":"NFL","kind":"efficiency","a":"Justin Tucker","b":"Harrison Butker","metric":"field goals","unit":"field-goal percentage","question":"Who converted field-goal attempts more efficiently: Justin Tucker or Harrison Butker?","research":["Field goals made in the same season","Field goals attempted","Optional: distance of attempts as counterevidence"],"why":"A percentage compares kickers fairly even when their attempt totals differ.","source_name":"NFL Player Stats","source_url":"https://www.nfl.com/stats/player-stats/"},
+    {"id":"nfl_frequency_daniels_hurts","sport":"NFL","kind":"frequency","a":"Jayden Daniels","b":"Jalen Hurts","metric":"games with 2+ total touchdowns","unit":"percent of games","question":"Who recorded at least two total touchdowns in a greater percentage of games: Jayden Daniels or Jalen Hurts?","research":["Qualifying games in the same regular season","Total games played","Passing and rushing touchdowns"],"why":"Relative frequency accounts for different numbers of games played.","source_name":"NFL Player Stats","source_url":"https://www.nfl.com/stats/player-stats/"},
+    {"id":"mlb_consistency_judge_ohtani_bases","sport":"MLB","kind":"consistency","a":"Aaron Judge","b":"Shohei Ohtani","metric":"total bases","unit":"bases","question":"Who has been more consistent at producing total bases: Aaron Judge or Shohei Ohtani?","research":["Total bases in the same 10 games","Games started","Any game with zero or an extreme total"],"why":"Game-by-game MAD measures how much offensive production changes.","source_name":"MLB Stats","source_url":"https://www.mlb.com/stats"},
+    {"id":"mlb_consistency_skenes_skubal","sport":"MLB","kind":"consistency","a":"Paul Skenes","b":"Tarik Skubal","metric":"strikeouts","unit":"strikeouts","question":"Who has been the more consistent strikeout pitcher: Paul Skenes or Tarik Skubal?","research":["Strikeouts in the same number of starts","Innings pitched in each start","Starts with restricted pitch counts"],"why":"MAD compares start-to-start variation, while innings pitched may be important counterevidence.","source_name":"MLB Pitching Stats","source_url":"https://www.mlb.com/stats/pitching"},
+    {"id":"mlb_frequency_lindor_witt","sport":"MLB","kind":"frequency","a":"Francisco Lindor","b":"Bobby Witt Jr.","metric":"multi-hit games","unit":"percent of games","question":"Who recorded multiple hits in a greater percentage of games: Francisco Lindor or Bobby Witt Jr.?","research":["Games with two or more hits in one shared period","Total games played","Use completed regular-season games"],"why":"Relative frequency compares how often the event occurred.","source_name":"MLB Stats","source_url":"https://www.mlb.com/stats"},
+    {"id":"mlb_efficiency_soto_judge_walks","sport":"MLB","kind":"efficiency","a":"Juan Soto","b":"Aaron Judge","metric":"plate appearances ending in a walk","unit":"walk percentage","question":"Who drew a walk in a greater percentage of plate appearances: Juan Soto or Aaron Judge?","research":["Walks in the same season or date range","Plate appearances","Use the same competition period"],"why":"Walks divided by plate appearances measures rate instead of total opportunities.","source_name":"MLB Stats","source_url":"https://www.mlb.com/stats"},
+    {"id":"nhl_frequency_matthews_draisaitl","sport":"NHL","kind":"frequency","a":"Auston Matthews","b":"Leon Draisaitl","metric":"games with at least one goal","unit":"percent of games","question":"Who scored in a greater percentage of games: Auston Matthews or Leon Draisaitl?","research":["Games with at least one goal","Total games played in the same period","Use the same game type"],"why":"Relative frequency measures how often each player scored, not just the total goals.","source_name":"NHL Stats","source_url":"https://www.nhl.com/stats/skaters"},
+    {"id":"nhl_typical_makar_hughes","sport":"NHL","kind":"typical","a":"Cale Makar","b":"Quinn Hughes","metric":"points","unit":"points","question":"Who has produced the stronger typical offensive game among defensemen: Cale Makar or Quinn Hughes?","research":["Points from the same 8–10 games","Game dates","Goals and assists as possible supporting detail"],"why":"Mean and median compare typical game production.","source_name":"NHL Stats","source_url":"https://www.nhl.com/stats/skaters"},
+    {"id":"nhl_consistency_sorokin_ottinger","sport":"NHL","kind":"consistency","a":"Ilya Sorokin","b":"Jake Oettinger","metric":"saves","unit":"saves","question":"Who has been the more consistent goaltender by saves: Ilya Sorokin or Jake Oettinger?","research":["Saves from the same number of starts","Shots faced","Exclude relief appearances or identify them"],"why":"MAD measures save-total consistency, while shots faced provides necessary context.","source_name":"NHL Goalie Stats","source_url":"https://www.nhl.com/stats/goalies"},
+    {"id":"soccer_typical_haaland_mbappe_goals","sport":"Soccer","kind":"typical","a":"Erling Haaland","b":"Kylian Mbappé","metric":"goals","unit":"goals","question":"Who has produced the stronger typical scoring match: Erling Haaland or Kylian Mbappé?","research":["Goals in the same number of matches","Use one clearly named competition","Minutes played and substitute appearances"],"why":"Mean and median compare match-level scoring without mixing competitions.","source_name":"UEFA Statistics","source_url":"https://www.uefa.com/uefachampionsleague/statistics/"},
+    {"id":"soccer_frequency_salah_vinicius","sport":"Soccer","kind":"frequency","a":"Mohamed Salah","b":"Vinícius Júnior","metric":"matches with a goal or assist","unit":"percent of matches","question":"Who contributed a goal or assist in a greater percentage of matches: Mohamed Salah or Vinícius Júnior?","research":["Matches with at least one goal or assist","Total matches in one named competition","Use the same season"],"why":"Relative frequency compares how regularly each player contributed.","source_name":"UEFA Statistics","source_url":"https://www.uefa.com/uefachampionsleague/statistics/"},
+    {"id":"soccer_efficiency_palmer_saka","sport":"Soccer","kind":"efficiency","a":"Cole Palmer","b":"Bukayo Saka","metric":"shots converted into goals","unit":"goal conversion percentage","question":"Who converted shots into goals more efficiently: Cole Palmer or Bukayo Saka?","research":["Goals in the same league season","Total shots","Do not mix club and national-team matches"],"why":"Conversion percentage compares goals with shooting opportunities.","source_name":"Premier League Stats","source_url":"https://www.premierleague.com/en/stats"},
+    {"id":"f1_consistency_leclerc_piastri","sport":"Formula 1","kind":"consistency","a":"Charles Leclerc","b":"Oscar Piastri","metric":"finishing position","unit":"place","question":"Who has been the more consistent Grand Prix finisher: Charles Leclerc or Oscar Piastri?","research":["Finishing positions from the same races","How DNFs will be recorded","Exclude sprint results"],"why":"MAD compares variation, but students must make and explain a fair DNF rule.","source_name":"Formula 1 Results","source_url":"https://www.formula1.com/en/results"},
+    {"id":"f1_typical_hamilton_alonso","sport":"Formula 1","kind":"typical_low","a":"Lewis Hamilton","b":"Fernando Alonso","metric":"finishing position","unit":"place","question":"Who has posted the stronger typical Grand Prix finish: Lewis Hamilton or Fernando Alonso?","research":["Finishing positions from the same races","DNFs and DNS results","Use Grand Prix results only"],"why":"Mean or median can describe a typical finish; in racing, a lower value is stronger.","source_name":"Formula 1 Results","source_url":"https://www.formula1.com/en/results"},
+    {"id":"pga_consistency_thomas_morikawa","sport":"PGA","kind":"consistency","a":"Justin Thomas","b":"Collin Morikawa","metric":"round score","unit":"strokes","question":"Who has been the more consistent recent golfer: Justin Thomas or Collin Morikawa?","research":["Scores from the same number of completed rounds","Tournament and course names","Rounds affected by unusual weather"],"why":"MAD measures consistency, while course and weather are possible limitations.","source_name":"PGA TOUR Stats","source_url":"https://www.pgatour.com/stats"},
+    {"id":"pga_frequency_scheffler_schauffele","sport":"PGA","kind":"frequency","a":"Scottie Scheffler","b":"Xander Schauffele","metric":"top-10 tournament finishes","unit":"percent of events","question":"Who finished in the top 10 in a greater percentage of events: Scottie Scheffler or Xander Schauffele?","research":["Top-10 finishes in the same season","Total events played","Use official completed events"],"why":"Relative frequency accounts for different numbers of tournament starts.","source_name":"PGA TOUR Stats","source_url":"https://www.pgatour.com/stats"},
+    {"id":"tennis_frequency_sinner_alcaraz","sport":"Tennis","kind":"frequency","a":"Jannik Sinner","b":"Carlos Alcaraz","metric":"service games won","unit":"percent of service games","question":"Who won a greater percentage of service games: Jannik Sinner or Carlos Alcaraz?","research":["Service games won in the same season and surface","Total service games played","Use singles matches only"],"why":"Relative frequency compares success fairly across different match totals.","source_name":"ATP Tour Stats","source_url":"https://www.atptour.com/en/stats"},
+    {"id":"tennis_consistency_gauff_swiatek","sport":"Tennis","kind":"consistency","a":"Coco Gauff","b":"Iga Świątek","metric":"double faults per match","unit":"double faults","question":"Who has been more consistent at limiting double faults: Coco Gauff or Iga Świątek?","research":["Double faults in the same number of matches","Use the same surface if possible","Match length as possible counterevidence"],"why":"MAD compares variation, while a lower typical number is better for double faults.","source_name":"WTA Stats","source_url":"https://www.wtatennis.com/stats"},
+]
+
 
 def parse_one_number(value):
     cleaned = str(value or "").replace(",", "").replace("%", "").strip()
@@ -412,6 +452,100 @@ def choose_random_debate(valid_ids):
     current = st.session_state.get("selected_debate_id")
     choices = [x for x in valid_ids if x != current] or valid_ids
     st.session_state["selected_debate_id"] = random.choice(choices)
+
+
+STAT_ABBREVIATIONS = {
+    "NBA": {"points":"PTS = points", "assists":"AST = assists", "blocks":"BLK = blocks", "field goals":"FGM = field goals made; FGA = field goals attempted; FG% = field-goal percentage", "three-pointers":"3PM = three-pointers made; 3PA = three-pointers attempted"},
+    "WNBA": {"points":"PTS = points", "assists":"AST = assists", "field goals":"FGM = field goals made; FGA = field goals attempted; FG% = field-goal percentage"},
+    "NFL": {"passing yards":"PASS YDS or YDS = passing yards", "receiving yards":"REC YDS = receiving yards", "receptions":"REC = receptions", "rushing yards":"RUSH YDS = rushing yards", "field goals":"FGM = field goals made; FGA = field goals attempted; FG% = field-goal percentage", "touchdowns":"TD = touchdowns; PASS TD = passing touchdowns; RUSH TD = rushing touchdowns", "games":"G or GP = games played"},
+    "MLB": {"hits":"H = hits; G = games played", "total bases":"TB = total bases", "strikeouts":"SO or K = strikeouts", "walk":"BB = walks; PA = plate appearances; BB% = walk percentage", "games":"G or GP = games played", "at-bats":"AB = at-bats"},
+    "NHL": {"saves":"SV = saves; SA or S = shots against; SV% = save percentage; GP = games played", "points":"P or PTS = points; G = goals; A = assists; GP = games played", "goals":"G = goals; A = assists; P or PTS = points; GP = games played"},
+    "Soccer": {"goals":"G or GLS = goals; A or AST = assists; APP = appearances; MIN = minutes", "shots":"SH or S = shots; SOT = shots on target; G = goals", "matches":"MP, APP, or GP = matches/appearances"},
+    "Formula 1": {"finishing position":"POS = finishing position; DNF = did not finish; DNS = did not start; DSQ = disqualified"},
+    "PGA": {"round score":"R1–R4 = round scores; TOT = tournament total; CUT = missed cut", "top-10":"T10 = top-10 finish; EVENTS or STARTS = tournaments played"},
+    "Tennis": {"service games":"SGW% = service games won percentage; DF = double faults; ACE = aces", "double faults":"DF = double faults; 1ST% = first serves in; 1ST WON% = first-serve points won"},
+}
+
+
+def stat_decoder(debate):
+    sport_hints = STAT_ABBREVIATIONS.get(debate["sport"], {})
+    metric = debate["metric"].lower()
+    matches = [explanation for keyword, explanation in sport_hints.items() if keyword in metric]
+    if not matches:
+        matches = list(sport_hints.values())[:2]
+    return matches
+
+
+def math_directions(kind, lower_is_better=False):
+    if kind == "consistency":
+        return [
+            "Find each player's mean: add all values, then divide by the number of values.",
+            "For every value, find its distance from the mean. Use absolute value so every distance is positive.",
+            "Add the absolute deviations and divide by the number of values. This is the MAD.",
+            "Compare the MADs. The smaller MAD represents the more consistent set of results.",
+            "Also compare the means: a player can be consistent without having the stronger typical performance.",
+        ]
+    if kind in ("typical", "typical_low"):
+        direction = "lower" if lower_is_better else "higher"
+        return [
+            "Find each mean: add all values, then divide by the number of values.",
+            "Find each median: order the values and locate the middle value (or average the two middle values).",
+            "Check for an extreme value that might pull the mean away from most results.",
+            f"Choose the fairer measure of center, then remember that a {direction} value is stronger for this question.",
+        ]
+    if kind == "efficiency":
+        return [
+            "For Player A, divide successful outcomes by total opportunities.",
+            "Multiply the decimal by 100 and label it with a percent sign.",
+            "Repeat the same steps for Player B.",
+            "Subtract the smaller percentage from the larger percentage. Describe the difference in percentage points.",
+        ]
+    return [
+        "For Player A, divide qualifying games by total games played.",
+        "Multiply the decimal by 100 to find the relative-frequency percentage.",
+        "Repeat the same steps for Player B.",
+        "Subtract the smaller percentage from the larger percentage. Describe the difference in percentage points.",
+    ]
+
+
+def build_news_pdf(debate, author, class_period, time_period, final_side, headline,
+                   initial_reason, evidence_summary, math_work, interpretation,
+                   limitation, final_claim, defense, source_url, image_a=None, image_b=None):
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=46, leftMargin=46, topMargin=42, bottomMargin=42)
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle("NewsTitle", parent=styles["Title"], fontName="Helvetica-Bold", fontSize=22, leading=25, textColor=colors.HexColor("#0F2747"), alignment=TA_CENTER, spaceAfter=12)
+    kicker = ParagraphStyle("Kicker", parent=styles["Normal"], fontName="Helvetica-Bold", fontSize=9, textColor=colors.HexColor("#2563EB"), alignment=TA_CENTER, spaceAfter=6)
+    byline = ParagraphStyle("Byline", parent=styles["Normal"], fontSize=9, textColor=colors.HexColor("#475569"), alignment=TA_CENTER, spaceAfter=14)
+    body = ParagraphStyle("NewsBody", parent=styles["BodyText"], fontSize=10.5, leading=15, spaceAfter=10)
+    subhead = ParagraphStyle("Subhead", parent=styles["Heading2"], fontName="Helvetica-Bold", fontSize=13, textColor=colors.HexColor("#0F2747"), spaceBefore=8, spaceAfter=6)
+    caption = ParagraphStyle("PhotoCaption", parent=styles["Normal"], fontSize=8.5, leading=10, textColor=colors.HexColor("#475569"), alignment=TA_CENTER)
+
+    story = [Paragraph(f"SPORTS DATA STUDIO | {escape(debate['sport'].upper())}", kicker), Paragraph(escape(headline or f"The Numbers Make the Case for {final_side}"), title_style), Paragraph(escape(f"By {author or 'Student Reporter'} | Class {class_period or '—'} | {date.today().strftime('%B %d, %Y')}"), byline)]
+
+    image_cells = []
+    for uploaded, player in [(image_a, debate["a"]), (image_b, debate["b"])]:
+        if uploaded is not None:
+            try:
+                uploaded.seek(0)
+                img = Image(uploaded, width=2.15*72, height=1.55*72, kind="proportional")
+                image_cells.append([img, Paragraph(f"<b>{escape(player)}</b>", caption)])
+            except Exception:
+                image_cells.append([Paragraph(f"<b>{escape(player)}</b>", styles["Heading2"]), Paragraph("Player image unavailable", caption)])
+        else:
+            initials = "".join(part[0] for part in player.replace("'", "").split()[:2]).upper()
+            image_cells.append([Paragraph(f"<font size='28'><b>{escape(initials)}</b></font>", title_style), Paragraph(f"<b>{escape(player)}</b>", caption)])
+    left_panel = Table([[image_cells[0][0]], [image_cells[0][1]]], colWidths=[2.5*72])
+    right_panel = Table([[image_cells[1][0]], [image_cells[1][1]]], colWidths=[2.5*72])
+    photos = Table([[left_panel, right_panel]], colWidths=[3.35*72,3.35*72])
+    photos.setStyle(TableStyle([("BACKGROUND",(0,0),(-1,-1),colors.HexColor("#EAF2FF")),("BOX",(0,0),(-1,-1),1,colors.HexColor("#93C5FD")),("INNERGRID",(0,0),(-1,-1),.5,colors.HexColor("#BFDBFE")),("ALIGN",(0,0),(-1,-1),"CENTER"),("VALIGN",(0,0),(-1,-1),"MIDDLE"),("TOPPADDING",(0,0),(-1,-1),10),("BOTTOMPADDING",(0,0),(-1,-1),10)]))
+    story += [photos, Spacer(1,14)]
+
+    lead = f"After examining {debate['metric']} from {time_period or 'the selected time period'}, I believe {final_side} has the stronger statistical case. My investigation began with this question: {debate['question']}"
+    story += [Paragraph(escape(lead), body), Paragraph("How I Investigated", subhead), Paragraph(escape(initial_reason or "I began by making a prediction and identifying the evidence needed to test it."), body), Paragraph("The Numerical Evidence", subhead), Paragraph(escape(evidence_summary), body), Paragraph("My Calculations", subhead), Paragraph(escape(math_work), body), Paragraph("What the Numbers Mean", subhead), Paragraph(escape(interpretation), body), Paragraph("The Other Side of the Argument", subhead), Paragraph(escape(limitation), body), Paragraph("My Final Verdict", subhead), Paragraph(escape(final_claim), body), Paragraph("Responding to the Opposition", subhead), Paragraph(escape(defense), body), Spacer(1,8), Paragraph(escape(f"Data source: {debate['source_name']} | {source_url}"), caption)]
+    doc.build(story)
+    buffer.seek(0)
+    return buffer.getvalue()
 
 
 def render_claim_debate_lab(teacher_mode):
@@ -480,6 +614,12 @@ def render_claim_debate_lab(teacher_mode):
         st.markdown('</div>', unsafe_allow_html=True)
         student_plan = "; ".join(d["research"])
     st.markdown(f"**Research source:** [{d['source_name']}]({d['source_url']})")
+    decoder = stat_decoder(d)
+    if decoder:
+        st.markdown("#### 🔎 Stat-page decoder")
+        st.caption("These are abbreviations students may see on the research page:")
+        for hint in decoder:
+            st.write("• " + hint)
     st.caption("Record the season or date range. Both athletes must use the same period and type of games.")
     period = st.text_input("Season or exact date range", placeholder="Example: 2025–26 regular season, games through March 1", key=f"period_{d['id']}")
 
@@ -636,6 +776,228 @@ def render_claim_debate_lab(teacher_mode):
             ])
             st.download_button("⬇️ Download Investigation Report", report, file_name=f"claim_debate_{d['id']}.txt", mime="text/plain", use_container_width=True)
 
+
+def render_claim_debate_lab_v2(teacher_mode):
+    st.markdown("## 🗣️ Claim & Debate Lab")
+    st.write("Research real athlete data, complete your own calculations, and defend the conclusion like a sports reporter.")
+
+    c1,c2 = st.columns([1,2])
+    with c1:
+        support = st.selectbox("Support level", ["Training Mode", "Coach Mode", "Independent Mode"], key="v2_support")
+        sports = ["All Sports"] + sorted({d["sport"] for d in DEBATES})
+        sport = st.selectbox("Sport", sports, key="v2_sport")
+    pool = DEBATES if sport == "All Sports" else [d for d in DEBATES if d["sport"] == sport]
+    valid_ids = [d["id"] for d in pool]
+    if st.session_state.get("v2_selected_debate_id") not in valid_ids:
+        st.session_state["v2_selected_debate_id"] = valid_ids[0]
+    with c2:
+        st.selectbox(
+            "Choose a real-player debate", valid_ids, key="v2_selected_debate_id",
+            format_func=lambda x: next(d["question"] for d in DEBATES if d["id"] == x)
+        )
+        def pick_v2():
+            current = st.session_state.get("v2_selected_debate_id")
+            choices = [x for x in valid_ids if x != current] or valid_ids
+            st.session_state["v2_selected_debate_id"] = random.choice(choices)
+        st.button("🎲 Give Me Another Debate", use_container_width=True, on_click=pick_v2, key="v2_random")
+
+    d = next(item for item in DEBATES if item["id"] == st.session_state["v2_selected_debate_id"])
+    st.markdown(f"""
+    <div class="studio-card">
+      <div class="studio-step">{d['sport']} Investigation</div>
+      <h2 style="margin:.25rem 0 .45rem;">{d['question']}</h2>
+      <p style="margin:0;"><b>Players:</b> {d['a']} vs. {d['b']}</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("### Step 1 — Make an initial claim")
+    initial = st.radio(
+        "Before researching, what do you predict?",
+        ["Player A", "Player B", "Not enough information yet"], index=2,
+        format_func=lambda x: claim_choice_label(x, d), horizontal=True,
+        key=f"v2_initial_{d['id']}"
+    )
+    initial_reason = st.text_area(
+        "Why is that your initial prediction?",
+        placeholder="This is a prediction. Strong statisticians revise claims when better evidence appears.",
+        key=f"v2_initial_reason_{d['id']}", height=80
+    )
+
+    st.markdown("### Step 2 — Build the research plan")
+    if support == "Independent Mode":
+        st.info("Decide which data directly measures the words in the debate question.")
+        student_plan = st.text_area("What will you research, and why is it relevant?", key=f"v2_plan_{d['id']}")
+        with st.expander("Check the app's suggested research plan"):
+            for item in d["research"]:
+                st.write("• " + item)
+            st.write("**Why this works:** " + d["why"])
+    else:
+        for item in d["research"]:
+            st.write("✅ " + item)
+        st.write("**Why these numbers matter:** " + d["why"])
+        student_plan = "; ".join(d["research"])
+
+    st.markdown("#### 🔎 Stat-page decoder")
+    st.caption("Look for these abbreviations or column labels on the research site:")
+    for hint in stat_decoder(d):
+        st.write("• " + hint)
+    st.markdown(f"**Research source:** [{d['source_name']}]({d['source_url']})")
+    period = st.text_input("Season or exact date range", placeholder="Example: 2025–26 regular season, games through March 1", key=f"v2_period_{d['id']}")
+    st.caption("Both athletes must use the same period and the same type of games or events.")
+
+    st.markdown("### Step 3 — Enter the real data")
+    math_ready = False
+    evidence_summary = ""
+    math_work = ""
+    fair_sample = True
+
+    if d["kind"] in ("typical", "typical_low", "consistency"):
+        a_col,b_col = st.columns(2)
+        with a_col:
+            raw_a = st.text_area(f"{d['a']} — game-by-game {d['metric']}", placeholder="Enter values separated by commas or new lines", key=f"v2_data_a_{d['id']}", height=145)
+        with b_col:
+            raw_b = st.text_area(f"{d['b']} — game-by-game {d['metric']}", placeholder="Enter values separated by commas or new lines", key=f"v2_data_b_{d['id']}", height=145)
+        a_vals,a_bad = parse_numeric_text(raw_a); b_vals,b_bad = parse_numeric_text(raw_b)
+        if a_bad or b_bad:
+            st.warning("Some entries were not numbers and were ignored.")
+        if a_vals and b_vals:
+            fair_sample = len(a_vals) == len(b_vals)
+            if not fair_sample:
+                st.warning(f"Fair-comparison check: {d['a']} has {len(a_vals)} values and {d['b']} has {len(b_vals)}. Try to use matching sample sizes.")
+            if min(len(a_vals),len(b_vals)) < 5:
+                st.warning("Try to collect at least 5 results; 8–10 usually creates stronger evidence.")
+
+            st.markdown("### Step 4 — You do the math")
+            with st.expander("Show me the calculation process", expanded=support == "Training Mode"):
+                for number, direction in enumerate(math_directions(d["kind"], d["kind"] == "typical_low"), 1):
+                    st.write(f"**{number}.** {direction}")
+                if d["kind"] == "consistency":
+                    st.latex(r"MAD=\frac{\sum |\text{each value}-\text{mean}|}{\text{number of values}}")
+                else:
+                    st.latex(r"\text{Mean}=\frac{\text{sum of all values}}{\text{number of values}}")
+
+            measures = ["Mean", "Median"] if d["kind"] != "consistency" else ["Mean", "Range", "MAD"]
+            answers = {}
+            a_calc,b_calc = st.columns(2)
+            with a_calc:
+                st.markdown(f"**{d['a']} — your calculated results**")
+                for measure in measures:
+                    answers[f"a_{measure}"] = st.text_input(measure, key=f"v2_calc_a_{measure}_{d['id']}", placeholder="Your answer")
+            with b_calc:
+                st.markdown(f"**{d['b']} — your calculated results**")
+                for measure in measures:
+                    answers[f"b_{measure}"] = st.text_input(measure, key=f"v2_calc_b_{measure}_{d['id']}", placeholder="Your answer")
+            math_work = st.text_area("Show your calculation work", key=f"v2_work_{d['id']}", placeholder="Write the addition, division, ordered list, or absolute deviations you used.", height=125)
+            math_ready = all(str(value).strip() for value in answers.values()) and bool(math_work.strip())
+            evidence_summary = "; ".join([f"{d['a']} {m.lower()}: {answers[f'a_{m}']} {d['unit']}; {d['b']} {m.lower()}: {answers[f'b_{m}']} {d['unit']}" for m in measures])
+
+    elif d["kind"] in ("efficiency", "frequency"):
+        is_frequency = d["kind"] == "frequency"
+        first_label = "Games meeting the condition" if is_frequency else "Successful outcomes"
+        second_label = "Total games" if is_frequency else "Total attempts/opportunities"
+        a_col,b_col = st.columns(2)
+        with a_col:
+            st.markdown(f"**{d['a']}**")
+            a_first = parse_one_number(st.text_input(first_label, key=f"v2_a_first_{d['id']}"))
+            a_total = parse_one_number(st.text_input(second_label, key=f"v2_a_total_{d['id']}"))
+        with b_col:
+            st.markdown(f"**{d['b']}**")
+            b_first = parse_one_number(st.text_input(first_label, key=f"v2_b_first_{d['id']}"))
+            b_total = parse_one_number(st.text_input(second_label, key=f"v2_b_total_{d['id']}"))
+        if all(x is not None for x in [a_first,a_total,b_first,b_total]):
+            if a_total <= 0 or b_total <= 0 or a_first > a_total or b_first > b_total:
+                st.error("Check the data: totals must be positive and successful/qualifying outcomes cannot exceed the totals.")
+            else:
+                st.markdown("### Step 4 — You do the math")
+                formula_name = "relative frequency" if is_frequency else "percentage"
+                numerator = "qualifying games" if is_frequency else "successful outcomes"
+                denominator = "total games" if is_frequency else "total opportunities"
+                st.latex(rf"\text{{{formula_name}}}=\frac{{\text{{{numerator}}}}}{{\text{{{denominator}}}}}\times100")
+                with st.expander("Show me the calculation process", expanded=support == "Training Mode"):
+                    for number, direction in enumerate(math_directions(d["kind"]), 1):
+                        st.write(f"**{number}.** {direction}")
+                    if not is_frequency:
+                        st.info("Example format only: 27 ÷ 30 = 0.90, then 0.90 × 100 = 90%. Use your researched numbers.")
+                p1,p2 = st.columns(2)
+                with p1:
+                    a_pct = st.text_input(f"{d['a']} — your calculated percentage", key=f"v2_a_pct_{d['id']}", placeholder="Include %")
+                with p2:
+                    b_pct = st.text_input(f"{d['b']} — your calculated percentage", key=f"v2_b_pct_{d['id']}", placeholder="Include %")
+                pp_diff = st.text_input("Difference in percentage points", key=f"v2_pp_{d['id']}", placeholder="Subtract the smaller percentage from the larger")
+                math_work = st.text_area("Show your calculation work", key=f"v2_work_{d['id']}", placeholder=f"{numerator} ÷ {denominator} × 100", height=125)
+                math_ready = all(str(x).strip() for x in [a_pct,b_pct,pp_diff,math_work])
+                evidence_summary = f"{d['a']}: {a_first:g}/{a_total:g}, calculated rate {a_pct}; {d['b']}: {b_first:g}/{b_total:g}, calculated rate {b_pct}; difference: {pp_diff} percentage points."
+
+    if math_ready:
+        st.markdown("### Step 5 — Decide what the evidence means")
+        final_side = st.radio(
+            "Which conclusion is best supported by your calculations?",
+            [d["a"], d["b"], "The results are tied", "There is not enough evidence"],
+            horizontal=True, key=f"v2_winner_{d['id']}"
+        )
+        interpretation = st.text_area(
+            "Explain what your calculated numbers mean in words.",
+            placeholder="Explain why the larger, smaller, or more consistent result matters for this exact claim.",
+            key=f"v2_interpret_{d['id']}", height=110
+        )
+        evidence_rating = st.radio(
+            "How does this evidence affect your original claim?",
+            ["Supports it", "Partially supports it", "Contradicts it", "Not enough evidence"],
+            horizontal=True, key=f"v2_rating_{d['id']}"
+        )
+        limitation = st.text_area(
+            "Name one limitation or piece of counterevidence.",
+            placeholder="Examples: small sample, different opponents, minutes played, outlier, course difficulty…",
+            key=f"v2_limitation_{d['id']}", height=85
+        )
+
+        st.markdown("### Step 6 — Build and defend the final claim")
+        final_claim = st.text_area(
+            "Final argument",
+            placeholder="I claim ___ because the data shows ___. This matters because ___. One limitation is ___; however, ___.",
+            key=f"v2_final_{d['id']}", height=145
+        )
+        challenge_map = {
+            "consistency":f"You used MAD to discuss consistency. Does {final_side} also have a strong mean, or could that athlete be consistently lower?",
+            "typical":"Would your conclusion change if you used the other measure of center or removed an outlier?",
+            "typical_low":"Could conditions, opponents, or course difficulty explain part of the difference?",
+            "efficiency":"Does the higher percentage come from enough attempts to be convincing? Defend the sample size.",
+            "frequency":"Is the chosen condition the fairest definition of success, or would another threshold change the conclusion?",
+        }
+        st.markdown("#### 🎤 Challenge My Argument")
+        st.warning(challenge_map[d["kind"]])
+        defense = st.text_area("Your response to the opposing analyst", key=f"v2_defense_{d['id']}", height=105)
+
+        checklist = {
+            "Initial prediction": bool(initial_reason.strip()), "Time period identified": bool(period.strip()),
+            "Fair sample sizes": fair_sample, "Calculations shown": bool(math_work.strip()),
+            "Numbers interpreted": bool(interpretation.strip()), "Counterevidence considered": bool(limitation.strip()),
+            "Final argument written": bool(final_claim.strip()), "Challenge answered": bool(defense.strip()),
+        }
+        completed = sum(checklist.values())
+        st.progress(completed/len(checklist), text=f"Investigation checklist: {completed}/{len(checklist)} complete")
+
+        if teacher_mode or completed == len(checklist):
+            st.markdown("### Step 7 — Publish your sports news article")
+            p1,p2 = st.columns(2)
+            with p1:
+                author = st.text_input("Reporter name", key=f"v2_author_{d['id']}")
+                headline = st.text_input("Article headline", value=f"The Numbers Make the Case for {final_side}", key=f"v2_headline_{d['id']}")
+                image_a = st.file_uploader(f"Optional photo of {d['a']}", type=["png","jpg","jpeg"], key=f"v2_image_a_{d['id']}")
+            with p2:
+                class_period = st.text_input("Class period", key=f"v2_class_{d['id']}")
+                st.caption("Use photos you have permission to use. Without uploads, the PDF uses player-initial cards.")
+                image_b = st.file_uploader(f"Optional photo of {d['b']}", type=["png","jpg","jpeg"], key=f"v2_image_b_{d['id']}")
+            if author.strip():
+                pdf_bytes = build_news_pdf(
+                    d, author, class_period, period, final_side, headline,
+                    initial_reason, evidence_summary, math_work, interpretation,
+                    limitation, final_claim, defense, d["source_url"], image_a, image_b
+                )
+                st.download_button("📰 Download My Sports News Article (PDF)", pdf_bytes, file_name=f"sports_news_{d['id']}.pdf", mime="application/pdf", use_container_width=True)
+            else:
+                st.info("Enter the reporter name to create the PDF article.")
+
 st.markdown("""
 <div class="studio-card">
   <div class="studio-step">Sports by the Numbers</div>
@@ -669,7 +1031,7 @@ if mode != "Claim & Debate Lab":
     unit=st.text_input("Unit",placeholder="Example: seconds, points, inches")
 
 if mode=="Claim & Debate Lab":
-    render_claim_debate_lab(teacher_mode)
+    render_claim_debate_lab_v2(teacher_mode)
 
 elif mode=="Analyze One Data Set":
     st.markdown("## Analyze One Data Set")
