@@ -1324,6 +1324,180 @@ def render_categorical_frequency_lab(teacher_mode):
             st.text_area("Compare at least two rows or columns using counts or percentages.", key="twoway_compare", height=95)
             st.text_area("Write a claim about whether the variables appear related. Defend it with evidence from the table.", key="twoway_claim", height=115)
 
+
+def render_categorical_frequency_lab_v2(teacher_mode):
+    st.markdown("## 🧩 Categorical Frequency Table Lab")
+    st.write("Type category names into the table headers, then enter the frequencies directly into the cells.")
+    table_type = st.radio(
+        "Choose the table type",
+        ["One-Way Frequency Table", "Two-Way Frequency Table"],
+        horizontal=True, key="frequency_table_type_v2"
+    )
+
+    if table_type == "One-Way Frequency Table":
+        st.markdown("### Step 1 — Fill in the one-way table")
+        variable = st.text_input("Categorical variable name", placeholder="Example: Favorite sport", key="oneway_variable_v2")
+        category_total = st.slider("Number of category rows",2,10,4,key="oneway_rows_v2")
+
+        header = st.columns([2,1,1])
+        header[0].markdown("**Category**")
+        header[1].markdown("**Frequency**")
+        header[2].markdown("**Percent (auto)**")
+        categories,counts = [],[]
+        row_entries=[]
+        current_total = sum(int(st.session_state.get(f"oneway_grid_count_{i}",0) or 0) for i in range(category_total))
+        for i in range(category_total):
+            cells = st.columns([2,1,1])
+            with cells[0]:
+                category = st.text_input(
+                    f"Category row {i+1}", placeholder=f"Category {i+1}",
+                    key=f"oneway_grid_category_{i}", label_visibility="collapsed"
+                )
+            with cells[1]:
+                count = int(st.number_input(
+                    f"Frequency row {i+1}", min_value=0, step=1,
+                    key=f"oneway_grid_count_{i}", label_visibility="collapsed"
+                ))
+            row_entries.append((category.strip(),count))
+            categories = [name for name,_ in row_entries if name]
+            counts = [value for name,value in row_entries if name]
+            with cells[2]:
+                st.markdown(f"**{(count/current_total*100):.1f}%**" if current_total else "—")
+
+        total = sum(value for _,value in row_entries)
+        total_row = st.columns([2,1,1])
+        total_row[0].markdown("**TOTAL**")
+        total_row[1].markdown(f"**{total}**")
+        total_row[2].markdown("**100%**" if total else "—")
+
+        with st.expander("Need help separating a list of individual responses?"):
+            raw = st.text_area(
+                "Paste individual responses here",
+                placeholder="Basketball\nSoccer\nBasketball\nFootball",
+                key="oneway_separator_v2", height=120
+            )
+            responses = standardize_categories(parse_categorical_text(raw),True)
+            if responses:
+                suggested = Counter(responses)
+                st.dataframe(
+                    pd.DataFrame({"Category to copy into the grid":list(suggested.keys()),"Frequency to copy":list(suggested.values())}),
+                    use_container_width=True, hide_index=True
+                )
+
+        duplicate_categories = len(categories) != len(set(name.casefold() for name in categories))
+        if duplicate_categories:
+            st.warning("Two category rows have the same name. Combine them or rename one before continuing.")
+        preds,reveal = prediction_section("cat_grid_one",[
+            "Which category do you predict will have the greatest frequency?",
+            "Do you predict any category will contain more than half of the data?"
+        ],teacher_mode)
+        if categories and total>0 and not duplicate_categories and reveal:
+            final_counts = [value for name,value in row_entries if name]
+            table = pd.DataFrame({
+                variable or "Category":categories,
+                "Frequency":final_counts,
+                "Relative Frequency":[round(value/total,3) for value in final_counts],
+                "Percent":[f"{value/total*100:.1f}%" for value in final_counts],
+            })
+            table.loc[len(table)] = ["Total",total,1.0,"100.0%"]
+            st.markdown("### Step 2 — Completed one-way frequency table")
+            st.dataframe(table,use_container_width=True,hide_index=True)
+            st.text_area("Write a claim supported by at least one frequency or percentage.", key="oneway_grid_claim", height=100)
+            st.text_area("Explain why the evidence supports your claim.", key="oneway_grid_reason", height=90)
+
+    else:
+        st.markdown("### Step 1 — Name the variables and choose the table size")
+        names = st.columns(2)
+        with names[0]:
+            row_name = st.text_input("Row variable name", placeholder="Example: Location", key="twoway_row_name_v2")
+        with names[1]:
+            column_name = st.text_input("Column variable name", placeholder="Example: Game result", key="twoway_column_name_v2")
+        sizes = st.columns(2)
+        with sizes[0]:
+            row_total = st.slider("Number of row categories",2,6,2,key="twoway_rows_v2")
+        with sizes[1]:
+            column_total = st.slider("Number of column categories",2,6,2,key="twoway_columns_v2")
+
+        st.markdown("### Step 2 — Fill in the two-way table")
+        header_cells = st.columns([1.5]+[1]*column_total+[1])
+        with header_cells[0]:
+            st.markdown(f"**{row_name or 'Row variable'} ↓**  \\  **{column_name or 'Column variable'} →**")
+        column_labels=[]
+        for j in range(column_total):
+            with header_cells[j+1]:
+                column_labels.append(st.text_input(
+                    f"Column category {j+1}", placeholder=f"Column {j+1}",
+                    key=f"twoway_grid_col_{j}", label_visibility="collapsed"
+                ).strip())
+        header_cells[-1].markdown("**TOTAL**")
+
+        row_labels=[]; values=[]
+        for i in range(row_total):
+            row_cells = st.columns([1.5]+[1]*column_total+[1])
+            with row_cells[0]:
+                row_label = st.text_input(
+                    f"Row category {i+1}", placeholder=f"Row {i+1}",
+                    key=f"twoway_grid_row_{i}", label_visibility="collapsed"
+                ).strip()
+            row_labels.append(row_label)
+            row_values=[]
+            for j in range(column_total):
+                with row_cells[j+1]:
+                    row_values.append(int(st.number_input(
+                        f"{row_label or f'Row {i+1}'} by {column_labels[j] or f'Column {j+1}'}",
+                        min_value=0,step=1,key=f"twoway_grid_cell_{i}_{j}",label_visibility="collapsed"
+                    )))
+            values.append(row_values)
+            row_cells[-1].markdown(f"**{sum(row_values)}**")
+
+        total_cells = st.columns([1.5]+[1]*column_total+[1])
+        total_cells[0].markdown("**TOTAL**")
+        for j in range(column_total):
+            total_cells[j+1].markdown(f"**{sum(values[i][j] for i in range(row_total))}**")
+        grand_total = sum(sum(row) for row in values)
+        total_cells[-1].markdown(f"**{grand_total}**")
+
+        missing_headers = not all(row_labels) or not all(column_labels)
+        duplicate_headers = (
+            len({label.casefold() for label in row_labels if label}) != len([label for label in row_labels if label]) or
+            len({label.casefold() for label in column_labels if label}) != len([label for label in column_labels if label])
+        )
+        if missing_headers:
+            st.info("Type a category name into every row and column header box.")
+        elif duplicate_headers:
+            st.warning("Every row category and every column category needs a different name.")
+
+        preds,reveal = prediction_section("cat_grid_two",[
+            "Which inner cell do you predict will have the greatest joint frequency?",
+            "Do you predict the two categorical variables will show a pattern or relationship?"
+        ],teacher_mode)
+        if not missing_headers and not duplicate_headers and grand_total>0 and reveal:
+            count_table = pd.DataFrame(values,index=row_labels,columns=column_labels)
+            st.markdown("### Step 3 — Completed two-way frequency table")
+            st.dataframe(add_frequency_totals(count_table),use_container_width=True)
+            st.caption("Inner cells are joint frequencies. The TOTAL row and column contain marginal frequencies.")
+            percent_view = st.radio(
+                "Choose a comparison view",
+                ["Counts", "Row percentages", "Column percentages", "Overall percentages"],
+                horizontal=True,key="twoway_grid_percent_view"
+            )
+            if percent_view == "Row percentages":
+                pct = count_table.div(count_table.sum(axis=1).replace(0,np.nan),axis=0)*100
+                st.dataframe(pct.round(1).astype(str)+"%",use_container_width=True)
+                st.caption("Each row represents 100%.")
+            elif percent_view == "Column percentages":
+                pct = count_table.div(count_table.sum(axis=0).replace(0,np.nan),axis=1)*100
+                st.dataframe(pct.round(1).astype(str)+"%",use_container_width=True)
+                st.caption("Each column represents 100%.")
+            elif percent_view == "Overall percentages":
+                pct = count_table/grand_total*100
+                st.dataframe(pct.round(1).astype(str)+"%",use_container_width=True)
+                st.caption("The entire table represents 100%.")
+            st.markdown("### Step 4 — Make and defend a categorical claim")
+            st.text_area("Identify the greatest joint frequency and its row/column categories.", key="twoway_grid_joint", height=85)
+            st.text_area("Compare at least two rows or columns using counts or percentages.", key="twoway_grid_compare", height=95)
+            st.text_area("Write a claim about the relationship and defend it with table evidence.", key="twoway_grid_claim", height=110)
+
 st.markdown("""
 <div class="studio-card">
   <div class="studio-step">Sports by the Numbers</div>
@@ -1493,7 +1667,7 @@ elif mode=="Change Over Time":
         st.text_area("What changed over time? Use center, spread, and the graph as evidence.")
 
 elif mode=="Categorical Data":
-    render_categorical_frequency_lab(teacher_mode)
+    render_categorical_frequency_lab_v2(teacher_mode)
 
 else:
     st.markdown("## Categorical Data")
