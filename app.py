@@ -427,6 +427,100 @@ DEBATES += [
     {"id":"tennis_consistency_gauff_swiatek","sport":"Tennis","kind":"consistency","a":"Coco Gauff","b":"Iga Świątek","metric":"double faults per match","unit":"double faults","question":"Who has been more consistent at limiting double faults: Coco Gauff or Iga Świątek?","research":["Double faults in the same number of matches","Use the same surface if possible","Match length as possible counterevidence"],"why":"MAD compares variation, while a lower typical number is better for double faults.","source_name":"WTA Stats","source_url":"https://www.wtatennis.com/stats"},
 ]
 
+SPORT_SOURCE_DEFAULTS = {
+    "NBA": ("NBA Stats", "https://www.nba.com/stats/players/boxscores"),
+    "WNBA": ("WNBA Stats", "https://stats.wnba.com/players/boxscores/"),
+    "NFL": ("NFL Player Stats", "https://www.nfl.com/stats/player-stats/"),
+    "MLB": ("MLB Stats", "https://www.mlb.com/stats"),
+    "NHL": ("NHL Stats", "https://www.nhl.com/stats"),
+    "Soccer": ("UEFA Statistics", "https://www.uefa.com/uefachampionsleague/statistics/"),
+    "Formula 1": ("Formula 1 Results", "https://www.formula1.com/en/results"),
+    "PGA": ("PGA TOUR Stats", "https://www.pgatour.com/stats"),
+    "Tennis": ("ATP/WTA Statistics", "https://www.atptour.com/en/stats"),
+}
+
+# 60 additional curated matchups bring the full debate bank to 100.
+# Compact specifications reuse the same research-quality rules as the original bank.
+ADDITIONAL_CLAIM_SPECS = [
+    ("nba_consistency_brunson_sga_ast","NBA","consistency","Jalen Brunson","Shai Gilgeous-Alexander","assists","assists","Who has been the more consistent playmaker: Jalen Brunson or Shai Gilgeous-Alexander?"),
+    ("nba_typical_tatum_durant_pts","NBA","typical","Jayson Tatum","Kevin Durant","points scored","points","Who has produced the stronger typical scoring game: Jayson Tatum or Kevin Durant?"),
+    ("nba_typical_jokic_sabonis_reb","NBA","typical","Nikola Jokić","Domantas Sabonis","rebounds","rebounds","Who has produced the stronger typical rebounding game: Nikola Jokić or Domantas Sabonis?"),
+    ("nba_typical_curry_young_3pm","NBA","typical","Stephen Curry","Trae Young","three-pointers made","three-pointers","Who has made more three-pointers in a typical game: Stephen Curry or Trae Young?"),
+    ("nba_efficiency_edwards_booker_fg","NBA","efficiency","Anthony Edwards","Devin Booker","field goals","field-goal percentage","Who has been the more efficient shooter: Anthony Edwards or Devin Booker?"),
+    ("nba_consistency_wemby_gobert_blk","NBA","consistency","Victor Wembanyama","Rudy Gobert","blocks","blocks","Who has been the more consistent shot blocker: Victor Wembanyama or Rudy Gobert?"),
+    ("nba_typical_doncic_haliburton_ast","NBA","typical","Luka Dončić","Tyrese Haliburton","assists","assists","Who has produced the stronger typical assist game: Luka Dončić or Tyrese Haliburton?"),
+    ("nba_frequency_fox_maxey_25","NBA","frequency","De'Aaron Fox","Tyrese Maxey","games with at least 25 points","percent of games","Who scored at least 25 points in a greater percentage of games: De'Aaron Fox or Tyrese Maxey?"),
+    ("nba_efficiency_giannis_zion_fg","NBA","efficiency","Giannis Antetokounmpo","Zion Williamson","field goals","field-goal percentage","Who converted field-goal attempts more efficiently: Giannis Antetokounmpo or Zion Williamson?"),
+    ("nba_consistency_brown_butler_stl","NBA","consistency","Jaylen Brown","Jimmy Butler","steals","steals","Who has been the more consistent ball thief: Jaylen Brown or Jimmy Butler?"),
+    ("wnba_typical_clark_thomas_ast","WNBA","typical","Caitlin Clark","Alyssa Thomas","assists","assists","Who has produced the stronger typical assist game: Caitlin Clark or Alyssa Thomas?"),
+    ("wnba_typical_wilson_stewart_reb","WNBA","typical","A'ja Wilson","Breanna Stewart","rebounds","rebounds","Who has produced the stronger typical rebounding game: A'ja Wilson or Breanna Stewart?"),
+    ("wnba_efficiency_ionescu_plum_3pt","WNBA","efficiency","Sabrina Ionescu","Kelsey Plum","three-pointers","three-point percentage","Who has converted three-point attempts more efficiently: Sabrina Ionescu or Kelsey Plum?"),
+    ("wnba_consistency_collier_thomas_stl","WNBA","consistency","Napheesa Collier","Alyssa Thomas","steals","steals","Who has been more consistent at producing steals: Napheesa Collier or Alyssa Thomas?"),
+    ("wnba_frequency_ogunbowale_loyd_20","WNBA","frequency","Arike Ogunbowale","Jewell Loyd","games with at least 20 points","percent of games","Who scored at least 20 points in a greater percentage of games: Arike Ogunbowale or Jewell Loyd?"),
+    ("wnba_consistency_griner_jones_blk","WNBA","consistency","Brittney Griner","Jonquel Jones","blocks","blocks","Who has been the more consistent shot blocker: Brittney Griner or Jonquel Jones?"),
+    ("nfl_typical_allen_mahomes_pass","NFL","typical","Josh Allen","Patrick Mahomes","passing yards","yards","Who has produced the stronger typical passing game: Josh Allen or Patrick Mahomes?"),
+    ("nfl_typical_jackson_daniels_rush","NFL","typical","Lamar Jackson","Jayden Daniels","rushing yards","yards","Who has produced the stronger typical rushing game among quarterbacks: Lamar Jackson or Jayden Daniels?"),
+    ("nfl_consistency_chase_jefferson_rec","NFL","consistency","Ja'Marr Chase","Justin Jefferson","receptions","receptions","Who has been the more consistent pass catcher: Ja'Marr Chase or Justin Jefferson?"),
+    ("nfl_consistency_barkley_henry_rush","NFL","consistency","Saquon Barkley","Derrick Henry","rushing yards","yards","Who has been the more consistent rusher: Saquon Barkley or Derrick Henry?"),
+    ("nfl_efficiency_burrow_herbert_comp","NFL","efficiency","Joe Burrow","Justin Herbert","completed passes","completion percentage","Who completed passes more efficiently: Joe Burrow or Justin Herbert?"),
+    ("nfl_frequency_lamb_stbrown_100","NFL","frequency","CeeDee Lamb","Amon-Ra St. Brown","100-yard receiving games","percent of games","Who recorded 100 receiving yards in a greater percentage of games: CeeDee Lamb or Amon-Ra St. Brown?"),
+    ("nfl_consistency_bosa_garrett_sacks","NFL","consistency","Nick Bosa","Myles Garrett","sacks","sacks","Who has been more consistent at recording sacks: Nick Bosa or Myles Garrett?"),
+    ("nfl_efficiency_tucker_aubrey_fg","NFL","efficiency","Justin Tucker","Brandon Aubrey","field goals","field-goal percentage","Who converted field-goal attempts more efficiently: Justin Tucker or Brandon Aubrey?"),
+    ("mlb_frequency_judge_ohtani_hr","MLB","frequency","Aaron Judge","Shohei Ohtani","games with a home run","percent of games","Who homered in a greater percentage of games: Aaron Judge or Shohei Ohtani?"),
+    ("mlb_efficiency_soto_freeman_onbase","MLB","efficiency","Juan Soto","Freddie Freeman","times reached base","on-base rate","Who reached base in a greater percentage of plate appearances: Juan Soto or Freddie Freeman?"),
+    ("mlb_typical_skubal_skenes_so","MLB","typical","Tarik Skubal","Paul Skenes","strikeouts","strikeouts","Who has produced more strikeouts in a typical start: Tarik Skubal or Paul Skenes?"),
+    ("mlb_efficiency_lindor_witt_sb","MLB","efficiency","Francisco Lindor","Bobby Witt Jr.","stolen bases","stolen-base success percentage","Who has converted stolen-base attempts more efficiently: Francisco Lindor or Bobby Witt Jr.?"),
+    ("mlb_typical_alonso_olson_hr","MLB","typical","Pete Alonso","Matt Olson","home runs","home runs","Who has hit more home runs in a typical stretch of games: Pete Alonso or Matt Olson?"),
+    ("mlb_consistency_cole_wheeler_ip","MLB","consistency","Gerrit Cole","Zack Wheeler","innings pitched","innings","Who has been more consistent in innings pitched per start: Gerrit Cole or Zack Wheeler?"),
+    ("mlb_typical_betts_arraez_hits","MLB","typical","Mookie Betts","Luis Arraez","hits","hits","Who has produced more hits in a typical game: Mookie Betts or Luis Arraez?"),
+    ("mlb_frequency_acuna_carroll_steal","MLB","frequency","Ronald Acuña Jr.","Corbin Carroll","games with a stolen base","percent of games","Who stole a base in a greater percentage of games: Ronald Acuña Jr. or Corbin Carroll?"),
+    ("nhl_typical_mcdavid_kucherov_ast","NHL","typical","Connor McDavid","Nikita Kucherov","assists","assists","Who has produced more assists in a typical game: Connor McDavid or Nikita Kucherov?"),
+    ("nhl_consistency_matthews_pastrnak_shots","NHL","consistency","Auston Matthews","David Pastrňák","shots","shots","Who has been more consistent in shots on goal: Auston Matthews or David Pastrňák?"),
+    ("nhl_efficiency_hellebuyck_saros_sv","NHL","efficiency","Connor Hellebuyck","Juuse Saros","saves","save percentage","Who stopped shots more efficiently: Connor Hellebuyck or Juuse Saros?"),
+    ("nhl_typical_bedard_celebrini_pts","NHL","typical","Connor Bedard","Macklin Celebrini","points","points","Who has produced more points in a typical game: Connor Bedard or Macklin Celebrini?"),
+    ("nhl_consistency_makar_fox_blocks","NHL","consistency","Cale Makar","Adam Fox","blocked shots","blocks","Who has been more consistent at blocking shots: Cale Makar or Adam Fox?"),
+    ("nhl_frequency_ovechkin_crosby_goal","NHL","frequency","Alex Ovechkin","Sidney Crosby","games with a goal","percent of games","Who scored in a greater percentage of games: Alex Ovechkin or Sidney Crosby?"),
+    ("nhl_typical_draisaitl_mackinnon_pp","NHL","typical","Leon Draisaitl","Nathan MacKinnon","power-play points","points","Who has produced more power-play points in a typical game: Leon Draisaitl or Nathan MacKinnon?"),
+    ("soccer_typical_haaland_kane_goals","Soccer","typical","Erling Haaland","Harry Kane","goals","goals","Who has scored more goals in a typical match: Erling Haaland or Harry Kane?"),
+    ("soccer_efficiency_mbappe_vinicius_sot","Soccer","efficiency","Kylian Mbappé","Vinícius Júnior","shots on target","shot-on-target percentage","Who put shots on target more efficiently: Kylian Mbappé or Vinícius Júnior?"),
+    ("soccer_typical_salah_saka_ast","Soccer","typical","Mohamed Salah","Bukayo Saka","assists","assists","Who has produced more assists in a typical match: Mohamed Salah or Bukayo Saka?"),
+    ("soccer_frequency_messi_bouanga_goal","Soccer","frequency","Lionel Messi","Denis Bouanga","matches with a goal","percent of matches","Who scored in a greater percentage of MLS matches: Lionel Messi or Denis Bouanga?"),
+    ("soccer_efficiency_rodri_rice_pass","Soccer","efficiency","Rodri","Declan Rice","completed passes","pass-completion percentage","Who completed passes more efficiently: Rodri or Declan Rice?"),
+    ("soccer_consistency_yamal_bellingham_shots","Soccer","consistency","Lamine Yamal","Jude Bellingham","shots","shots","Who has been more consistent in generating shots: Lamine Yamal or Jude Bellingham?"),
+    ("soccer_frequency_lewandowski_lautaro","Soccer","frequency","Robert Lewandowski","Lautaro Martínez","matches with a goal","percent of matches","Who scored in a greater percentage of league matches: Robert Lewandowski or Lautaro Martínez?"),
+    ("f1_typical_low_norris_piastri_qual","Formula 1","typical_low","Lando Norris","Oscar Piastri","qualifying position","place","Who has posted the stronger typical qualifying position: Lando Norris or Oscar Piastri?"),
+    ("f1_consistency_russell_leclerc_finish","Formula 1","consistency","George Russell","Charles Leclerc","finishing position","place","Who has been the more consistent Grand Prix finisher: George Russell or Charles Leclerc?"),
+    ("f1_frequency_verstappen_hamilton_podium","Formula 1","frequency","Max Verstappen","Lewis Hamilton","podium finishes","percent of races","Who reached the podium in a greater percentage of races: Max Verstappen or Lewis Hamilton?"),
+    ("f1_typical_low_alonso_sainz_finish","Formula 1","typical_low","Fernando Alonso","Carlos Sainz","finishing position","place","Who has posted the stronger typical Grand Prix finish: Fernando Alonso or Carlos Sainz?"),
+    ("f1_consistency_hamilton_russell_qual","Formula 1","consistency","Lewis Hamilton","George Russell","qualifying position","place","Who has been the more consistent qualifier: Lewis Hamilton or George Russell?"),
+    ("pga_typical_low_scheffler_mcilroy_round","PGA","typical_low","Scottie Scheffler","Rory McIlroy","round score","strokes","Who has posted the stronger typical round score: Scottie Scheffler or Rory McIlroy?"),
+    ("pga_efficiency_morikawa_schauffele_gir","PGA","efficiency","Collin Morikawa","Xander Schauffele","greens in regulation","greens-in-regulation percentage","Who hit greens in regulation more efficiently: Collin Morikawa or Xander Schauffele?"),
+    ("pga_frequency_thomas_hovland_birdie","PGA","frequency","Justin Thomas","Viktor Hovland","rounds with at least four birdies","percent of rounds","Who recorded at least four birdies in a greater percentage of rounds: Justin Thomas or Viktor Hovland?"),
+    ("pga_efficiency_spieth_henley_fairway","PGA","efficiency","Jordan Spieth","Russell Henley","fairways hit","driving-accuracy percentage","Who hit fairways more efficiently: Jordan Spieth or Russell Henley?"),
+    ("pga_consistency_cantlay_finau_round","PGA","consistency","Patrick Cantlay","Tony Finau","round score","strokes","Who has been the more consistent scorer: Patrick Cantlay or Tony Finau?"),
+    ("tennis_typical_sinner_alcaraz_aces","Tennis","typical","Jannik Sinner","Carlos Alcaraz","aces","aces","Who has served more aces in a typical match: Jannik Sinner or Carlos Alcaraz?"),
+    ("tennis_efficiency_gauff_sabalenka_first","Tennis","efficiency","Coco Gauff","Aryna Sabalenka","first serves in","first-serve percentage","Who put first serves in play more efficiently: Coco Gauff or Aryna Sabalenka?"),
+    ("tennis_consistency_swiatek_rybakina_games","Tennis","consistency","Iga Świątek","Elena Rybakina","games lost per match","games","Who has been more consistent at limiting games lost: Iga Świątek or Elena Rybakina?"),
+    ("tennis_frequency_djokovic_medvedev_tiebreak","Tennis","frequency","Novak Djokovic","Daniil Medvedev","tiebreaks won","percent of tiebreaks","Who won a greater percentage of tiebreaks: Novak Djokovic or Daniil Medvedev?"),
+]
+
+for claim_id,sport,kind,player_a,player_b,metric,unit,question in ADDITIONAL_CLAIM_SPECS:
+    if kind in ("typical", "typical_low", "consistency"):
+        research = [f"Game-by-game or event-by-event {metric} for both athletes", "Use the same 8–10 games, matches, starts, rounds, or races", "Record dates and identify unusual or incomplete performances"]
+    elif kind == "efficiency":
+        research = [f"Successful {metric} for both athletes", "Total attempts or opportunities for both athletes", "Use the same season, competition, and time period"]
+    else:
+        research = [f"Number of qualifying {metric} for both athletes", "Total games, matches, rounds, or races", "Use the same season, competition, and time period"]
+    why = {
+        "typical":"Mean and median compare a typical performance while helping students consider outliers.",
+        "typical_low":"Mean and median compare a typical performance; for this statistic, a lower value is stronger.",
+        "consistency":"Game-by-game data and MAD compare how much the performances vary.",
+        "efficiency":"A percentage compares successful outcomes with total opportunities.",
+        "frequency":"Relative frequency compares how often the event occurred, even with different sample totals.",
+    }[kind]
+    source_name,source_url = SPORT_SOURCE_DEFAULTS[sport]
+    DEBATES.append({"id":claim_id,"sport":sport,"kind":kind,"a":player_a,"b":player_b,"metric":metric,"unit":unit,"question":question,"research":research,"why":why,"source_name":source_name,"source_url":source_url})
+
 
 def parse_one_number(value):
     cleaned = str(value or "").replace(",", "").replace("%", "").strip()
@@ -1036,6 +1130,200 @@ def render_claim_debate_lab_v2(teacher_mode):
             else:
                 st.info("Enter the reporter name to create the PDF article.")
 
+
+def standardize_categories(values, ignore_case=True):
+    cleaned = [" ".join(str(value).strip().split()) for value in values if str(value).strip()]
+    if not ignore_case:
+        return cleaned
+    display = {}
+    standardized = []
+    for value in cleaned:
+        key = value.casefold()
+        if key not in display:
+            display[key] = value
+        standardized.append(display[key])
+    return standardized
+
+
+def add_frequency_totals(table):
+    result = table.copy().astype(int)
+    result["Total"] = result.sum(axis=1)
+    result.loc["Total"] = result.sum(axis=0)
+    return result
+
+
+def render_categorical_frequency_lab(teacher_mode):
+    st.markdown("## 🧩 Categorical Frequency Table Lab")
+    st.write("Separate responses into categories, organize the counts, and use a one-way or two-way frequency table to defend a claim.")
+    table_type = st.radio(
+        "Choose the table type",
+        ["One-Way Frequency Table", "Two-Way Frequency Table"],
+        horizontal=True, key="frequency_table_type"
+    )
+
+    if table_type == "One-Way Frequency Table":
+        st.markdown("### Step 1 — Identify one categorical variable")
+        variable = st.text_input("Variable name", placeholder="Example: Favorite sport", key="oneway_variable")
+        entry_type = st.radio(
+            "How will you enter the categories?",
+            ["Paste individual responses", "Enter category counts"],
+            horizontal=True, key="oneway_entry"
+        )
+        ignore_case = st.checkbox("Treat capitalization differences as the same category", value=True, key="oneway_case")
+        categories,counts = [],[]
+
+        if entry_type == "Paste individual responses":
+            raw = st.text_area(
+                "Paste the individual responses",
+                height=170,
+                placeholder="Basketball\nSoccer\nBasketball\nFootball\nSoccer",
+                key="oneway_raw"
+            )
+            responses = standardize_categories(parse_categorical_text(raw), ignore_case)
+            if responses:
+                counter = Counter(responses)
+                categories = list(counter.keys()); counts = list(counter.values())
+                st.markdown("#### Categories the app separated")
+                st.dataframe(pd.DataFrame({"Category":categories,"Tally/Count":counts}), use_container_width=True, hide_index=True)
+                st.caption("Check these categories before continuing. Misspellings such as ‘Socer’ and ‘Soccer’ will remain separate so students can identify and correct them.")
+        else:
+            category_total = st.slider("Number of categories",2,10,4,key="oneway_category_total")
+            for i in range(category_total):
+                c1,c2 = st.columns([2,1])
+                with c1:
+                    category = st.text_input(f"Category {i+1}", key=f"oneway_category_{i}")
+                with c2:
+                    count = st.number_input(f"Frequency {i+1}",min_value=0,step=1,key=f"oneway_count_{i}")
+                if category.strip():
+                    categories.append(category.strip()); counts.append(int(count))
+
+        preds,reveal = prediction_section("cat_frequency_one",[
+            "Which category do you predict will occur most frequently?",
+            "Do you predict one category will contain more than half of the responses? Explain."
+        ],teacher_mode)
+        if not reveal:
+            st.info("Answer the prediction questions and lock them in to reveal the completed frequency table.")
+        if categories and sum(counts)>0 and reveal:
+            total = sum(counts)
+            table = pd.DataFrame({
+                "Category":categories,
+                "Frequency":counts,
+                "Relative Frequency":[round(c/total,3) for c in counts],
+                "Percent":[f"{c/total*100:.1f}%" for c in counts],
+            })
+            table.loc[len(table)] = ["Total",total,1.0,"100.0%"]
+            st.markdown("### Step 2 — One-way frequency table")
+            st.dataframe(table,use_container_width=True,hide_index=True)
+            st.caption("Relative frequency = category frequency ÷ total number of responses")
+            if st.checkbox("Show a frequency bar chart", key="oneway_bar"):
+                st.pyplot(make_bar(categories,counts,variable or "One-Way Frequency Table"))
+            st.markdown("### Step 3 — Interpret the categories")
+            st.text_area("Write a claim supported by at least one frequency or percentage.", key="oneway_claim", height=100)
+            st.text_area("Explain why that number supports your claim.", key="oneway_reasoning", height=90)
+
+    else:
+        st.markdown("### Step 1 — Identify two categorical variables")
+        n1,n2 = st.columns(2)
+        with n1:
+            row_name = st.text_input("Row variable", value="Group", key="twoway_row_name")
+        with n2:
+            column_name = st.text_input("Column variable", value="Outcome", key="twoway_column_name")
+        entry_type = st.radio(
+            "How will you enter the paired categories?",
+            ["Paste paired individual responses", "Enter the table counts"],
+            horizontal=True, key="twoway_entry"
+        )
+        ignore_case = st.checkbox("Treat capitalization differences as the same category", value=True, key="twoway_case")
+        count_table = None
+
+        if entry_type == "Paste paired individual responses":
+            raw = st.text_area(
+                "Paste one pair per line",
+                height=190,
+                placeholder="Home, Win\nAway, Loss\nHome, Win\nAway, Win\nHome, Loss",
+                key="twoway_raw"
+            )
+            pairs,bad_lines = [],[]
+            for line_number,line in enumerate(str(raw or "").splitlines(),1):
+                if not line.strip():
+                    continue
+                parts = line.split("\t") if "\t" in line else line.split(",")
+                parts = [part.strip() for part in parts]
+                if len(parts) != 2 or not all(parts):
+                    bad_lines.append(line_number)
+                else:
+                    pairs.append(parts)
+            if bad_lines:
+                st.warning("Each line needs exactly two categories. Check line(s): " + ", ".join(map(str,bad_lines[:12])))
+            if pairs:
+                row_values = standardize_categories([pair[0] for pair in pairs],ignore_case)
+                column_values = standardize_categories([pair[1] for pair in pairs],ignore_case)
+                paired = pd.DataFrame({row_name or "Row Variable":row_values,column_name or "Column Variable":column_values})
+                st.markdown("#### Categories the app separated")
+                s1,s2 = st.columns(2)
+                s1.write(f"**{row_name}:** " + ", ".join(dict.fromkeys(row_values)))
+                s2.write(f"**{column_name}:** " + ", ".join(dict.fromkeys(column_values)))
+                with st.expander("Check the separated pairs"):
+                    st.dataframe(paired,use_container_width=True,hide_index=True)
+                count_table = pd.crosstab(paired.iloc[:,0],paired.iloc[:,1])
+        else:
+            d1,d2 = st.columns(2)
+            with d1:
+                row_total = st.slider("Number of row categories",2,6,2,key="twoway_rows")
+            with d2:
+                column_total = st.slider("Number of column categories",2,6,2,key="twoway_columns")
+            row_labels = [st.text_input(f"{row_name} category {i+1}",value=f"Row {i+1}",key=f"twoway_row_{i}") for i in range(row_total)]
+            column_labels = [st.text_input(f"{column_name} category {j+1}",value=f"Column {j+1}",key=f"twoway_col_{j}") for j in range(column_total)]
+            if len(set(row_labels)) < len(row_labels) or len(set(column_labels)) < len(column_labels):
+                st.warning("Every row and column category needs a different name.")
+            else:
+                rows=[]
+                st.markdown("#### Enter each joint frequency")
+                for i,row_label in enumerate(row_labels):
+                    st.write(f"**{row_label}**")
+                    cells = st.columns(column_total)
+                    row=[]
+                    for j,column_label in enumerate(column_labels):
+                        with cells[j]:
+                            row.append(int(st.number_input(column_label,min_value=0,step=1,key=f"twoway_cell_{i}_{j}")))
+                    rows.append(row)
+                count_table = pd.DataFrame(rows,index=row_labels,columns=column_labels)
+
+        preds,reveal = prediction_section("cat_frequency_two",[
+            "Which combination of categories do you predict will have the greatest joint frequency?",
+            "Do you predict the two variables will show a noticeable pattern or relationship? Why?"
+        ],teacher_mode)
+        if not reveal:
+            st.info("Answer the prediction questions and lock them in to reveal the two-way table.")
+        if count_table is not None and int(count_table.to_numpy().sum())>0 and reveal:
+            st.markdown("### Step 2 — Two-way frequency table")
+            display_counts = add_frequency_totals(count_table)
+            st.dataframe(display_counts,use_container_width=True)
+            st.caption("Inside cells are joint frequencies. The final row and column are marginal totals.")
+
+            percent_view = st.radio(
+                "Optional percentage view",
+                ["Counts only", "Row percentages", "Column percentages", "Overall percentages"],
+                horizontal=True, key="twoway_percent_view"
+            )
+            if percent_view == "Row percentages":
+                pct = count_table.div(count_table.sum(axis=1).replace(0,np.nan),axis=0)*100
+                st.dataframe(pct.round(1).astype(str)+"%",use_container_width=True)
+                st.caption("Each row is its own 100%. Use this to compare outcomes within each row category.")
+            elif percent_view == "Column percentages":
+                pct = count_table.div(count_table.sum(axis=0).replace(0,np.nan),axis=1)*100
+                st.dataframe(pct.round(1).astype(str)+"%",use_container_width=True)
+                st.caption("Each column is its own 100%. Use this to compare row groups within each column category.")
+            elif percent_view == "Overall percentages":
+                pct = count_table/count_table.to_numpy().sum()*100
+                st.dataframe(pct.round(1).astype(str)+"%",use_container_width=True)
+                st.caption("Every cell is compared with the grand total, so the entire table represents 100%.")
+
+            st.markdown("### Step 3 — Interpret the relationship")
+            st.text_area("What is the greatest joint frequency, and which two categories create it?", key="twoway_joint", height=85)
+            st.text_area("Compare at least two rows or columns using counts or percentages.", key="twoway_compare", height=95)
+            st.text_area("Write a claim about whether the variables appear related. Defend it with evidence from the table.", key="twoway_claim", height=115)
+
 st.markdown("""
 <div class="studio-card">
   <div class="studio-step">Sports by the Numbers</div>
@@ -1064,7 +1352,7 @@ elif st.session_state["last_studio_mode"] != mode:
 
 dataset_name=""
 unit=""
-if mode != "Claim & Debate Lab":
+if mode not in ("Claim & Debate Lab", "Categorical Data"):
     dataset_name=st.text_input("Dataset / activity name",placeholder="Example: 40-Yard Dash")
     unit=st.text_input("Unit",placeholder="Example: seconds, points, inches")
 
@@ -1203,6 +1491,9 @@ elif mode=="Change Over Time":
             st.pyplot(make_box(period_data,labels,title,unit))
         st.markdown("### Interpret the Change")
         st.text_area("What changed over time? Use center, spread, and the graph as evidence.")
+
+elif mode=="Categorical Data":
+    render_categorical_frequency_lab(teacher_mode)
 
 else:
     st.markdown("## Categorical Data")
