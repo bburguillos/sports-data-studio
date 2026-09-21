@@ -75,9 +75,10 @@ div[data-testid="stMetric"] {
 </style>
 """, unsafe_allow_html=True)
 
-def parse_numeric_text(text):
+def parse_numeric_text(text, special_values=None):
     if not str(text or "").strip():
         return [], []
+    special_values = {str(k).upper(): float(v) for k,v in (special_values or {}).items()}
     raw = str(text).replace("\t", ",").replace("\n", ",").replace(";", ",")
     tokens = []
     for chunk in raw.split(","):
@@ -85,6 +86,9 @@ def parse_numeric_text(text):
     values, bad = [], []
     for token in tokens:
         cleaned = token.replace("$","").replace("%","").strip()
+        if cleaned.upper() in special_values:
+            values.append(special_values[cleaned.upper()])
+            continue
         try:
             values.append(float(cleaned))
         except ValueError:
@@ -508,6 +512,34 @@ def math_directions(kind, lower_is_better=False):
     ]
 
 
+def render_mmm_calculator(key, special_values=None):
+    with st.expander("🧮 Open Mean, Median & Mode Calculator"):
+        st.caption("This is an optional scratchpad. Try the calculation yourself first, then use this tool to check your work.")
+        if special_values:
+            st.info("For this Formula 1 investigation, DNF is automatically entered as 22.")
+        raw = st.text_area(
+            "Calculator data",
+            placeholder="Enter values separated by commas or new lines",
+            key=f"mmm_raw_{key}", height=100
+        )
+        values,bad = parse_numeric_text(raw, special_values=special_values)
+        if bad:
+            st.warning("These entries were not recognized: " + ", ".join(bad[:10]))
+        if st.button("Calculate Mean, Median & Mode", key=f"mmm_button_{key}", use_container_width=True):
+            if not values:
+                st.warning("Enter at least one value first.")
+            else:
+                ordered = sorted(values)
+                total = sum(values)
+                mean_value = statistics.mean(values)
+                median_value = statistics.median(values)
+                mode_value = calc_mode(values)
+                st.write("**Ordered data:** " + ", ".join(fmt(x) for x in ordered))
+                st.write(f"**Mean:** {fmt(total)} ÷ {len(values)} = **{fmt(mean_value)}**")
+                st.write(f"**Median:** **{fmt(median_value)}**")
+                st.write(f"**Mode:** **{mode_value}**")
+
+
 def build_news_pdf(debate, author, class_period, time_period, final_side, headline,
                    initial_reason, evidence_summary, math_work, interpretation,
                    limitation, final_claim, defense, source_url, image_a=None, image_b=None):
@@ -857,7 +889,11 @@ def render_claim_debate_lab_v2(teacher_mode):
             raw_a = st.text_area(f"{d['a']} — game-by-game {d['metric']}", placeholder="Enter values separated by commas or new lines", key=f"v2_data_a_{d['id']}", height=145)
         with b_col:
             raw_b = st.text_area(f"{d['b']} — game-by-game {d['metric']}", placeholder="Enter values separated by commas or new lines", key=f"v2_data_b_{d['id']}", height=145)
-        a_vals,a_bad = parse_numeric_text(raw_a); b_vals,b_bad = parse_numeric_text(raw_b)
+        race_codes = {"DNF":22} if d["sport"] == "Formula 1" else None
+        if race_codes:
+            st.info("🏁 Formula 1 coding rule: DNF (in any capitalization) is recorded as 22, representing last place for this classroom comparison.")
+        a_vals,a_bad = parse_numeric_text(raw_a, special_values=race_codes)
+        b_vals,b_bad = parse_numeric_text(raw_b, special_values=race_codes)
         if a_bad or b_bad:
             st.warning("Some entries were not numbers and were ignored.")
         if a_vals and b_vals:
@@ -927,6 +963,8 @@ def render_claim_debate_lab_v2(teacher_mode):
                 math_work = st.text_area("Show your calculation work", key=f"v2_work_{d['id']}", placeholder=f"{numerator} ÷ {denominator} × 100", height=125)
                 math_ready = all(str(x).strip() for x in [a_pct,b_pct,pp_diff,math_work])
                 evidence_summary = f"{d['a']}: {a_first:g}/{a_total:g}, calculated rate {a_pct}; {d['b']}: {b_first:g}/{b_total:g}, calculated rate {b_pct}; difference: {pp_diff} percentage points."
+
+    render_mmm_calculator(d["id"], special_values={"DNF":22} if d["sport"] == "Formula 1" else None)
 
     if math_ready:
         st.markdown("### Step 5 — Decide what the evidence means")
