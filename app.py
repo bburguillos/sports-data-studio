@@ -208,6 +208,32 @@ section[data-testid="stMain"] {
     font-weight:800;
     letter-spacing:.02em;
 }
+.progress-grid {
+    display:grid;
+    grid-template-columns:repeat(6,minmax(0,1fr));
+    gap:.42rem;
+    margin:.45rem 0 .7rem;
+}
+.progress-stage {
+    border:1px solid #94a3b8;
+    border-radius:10px;
+    padding:.52rem .35rem;
+    background:#ffffff;
+    color:#475569 !important;
+    font-size:.78rem;
+    font-weight:800;
+    text-align:center;
+}
+.progress-stage.done {
+    background:#dcfce7;
+    border-color:#22c55e;
+    color:#14532d !important;
+}
+.progress-stage.current {
+    background:#dbeafe;
+    border:2px solid #2563eb;
+    color:#1e3a8a !important;
+}
 
 /* iPhone/iPad layout: large tap targets, readable form text, and controlled
    wrapping without changing any classroom calculations or saved content. */
@@ -293,6 +319,7 @@ svg {
         min-height:48px !important;
         align-items:center !important;
     }
+    .progress-grid {grid-template-columns:repeat(2,minmax(0,1fr));}
 }
 
 @media (max-width: 480px) {
@@ -972,6 +999,68 @@ def math_directions(kind, lower_is_better=False):
     ]
 
 
+def claim_progress_snapshot(debate, support):
+    claim_id = debate["id"]
+    value = lambda key: str(st.session_state.get(key, "") or "").strip()
+
+    prediction_done = bool(value(f"v2_initial_reason_{claim_id}"))
+    research_done = bool(value(f"v2_period_{claim_id}"))
+    if support == "Independent Mode":
+        research_done = research_done and bool(value(f"v2_plan_{claim_id}"))
+
+    if debate["kind"] in ("typical", "typical_low", "consistency"):
+        race_codes = {"DNF":22} if debate["sport"] == "Formula 1" else None
+        a_values,_ = parse_numeric_text(value(f"v2_data_a_{claim_id}"), special_values=race_codes)
+        b_values,_ = parse_numeric_text(value(f"v2_data_b_{claim_id}"), special_values=race_codes)
+        data_done = bool(a_values and b_values and len(a_values) == len(b_values))
+        measures = ["Mean", "Median"] if debate["kind"] != "consistency" else ["Mean", "Range", "MAD"]
+        math_fields = [f"v2_calc_a_{measure}_{claim_id}" for measure in measures]
+        math_fields += [f"v2_calc_b_{measure}_{claim_id}" for measure in measures]
+    else:
+        data_fields = [
+            f"v2_a_first_{claim_id}", f"v2_a_total_{claim_id}",
+            f"v2_b_first_{claim_id}", f"v2_b_total_{claim_id}",
+        ]
+        data_done = all(value(key) for key in data_fields)
+        math_fields = [f"v2_a_pct_{claim_id}", f"v2_b_pct_{claim_id}", f"v2_pp_{claim_id}"]
+
+    math_done = data_done and all(value(key) for key in math_fields) and bool(value(f"v2_work_{claim_id}"))
+    interpretation_fields = [
+        f"v2_interpret_{claim_id}", f"v2_limitation_{claim_id}",
+        f"v2_final_{claim_id}", f"v2_defense_{claim_id}",
+    ]
+    interpretation_done = math_done and all(value(key) for key in interpretation_fields)
+    article_done = interpretation_done and bool(value(f"v2_author_{claim_id}"))
+
+    stages = [
+        ("Prediction", prediction_done, "Explain your initial prediction."),
+        ("Research", research_done, "Complete the research plan and enter the exact time period."),
+        ("Data", data_done, "Enter matching, fair data for both athletes."),
+        ("Math", math_done, "Enter your calculated results and show your work."),
+        ("Interpret", interpretation_done, "Explain the evidence, limitation, final claim, and defense."),
+        ("Article", article_done, "Enter your reporter name and publish the PDF article."),
+    ]
+    return stages
+
+
+def render_claim_progress(debate, support):
+    stages = claim_progress_snapshot(debate, support)
+    first_incomplete = next((index for index,(_,done,_) in enumerate(stages) if not done), None)
+    cards = []
+    for index,(label,done,_) in enumerate(stages):
+        status = "done" if done else "current" if index == first_incomplete else "pending"
+        icon = "✓" if done else str(index + 1)
+        cards.append(f'<div class="progress-stage {status}">{icon} · {label}</div>')
+    completed = sum(done for _,done,_ in stages)
+    st.markdown("#### Investigation Progress")
+    st.markdown('<div class="progress-grid">' + "".join(cards) + '</div>', unsafe_allow_html=True)
+    st.progress(completed/len(stages), text=f"{completed} of {len(stages)} stages complete")
+    if first_incomplete is None:
+        st.success("All stages are complete. Download your finished sports news article below.")
+    else:
+        st.info(f"**Next:** {stages[first_incomplete][2]}")
+
+
 def render_mmm_calculator(key, special_values=None):
     with st.expander("🧮 Open Mean, Median & Mode Calculator"):
         st.caption("This is an optional scratchpad. Try the calculation yourself first, then use this tool to check your work.")
@@ -1038,7 +1127,7 @@ def build_news_pdf(debate, author, class_period, time_period, final_side, headli
     story += [photos, Spacer(1,14)]
 
     lead = f"After examining {debate['metric']} from {time_period or 'the selected time period'}, I believe {final_side} has the stronger statistical case. My investigation began with this question: {debate['question']}"
-    story += [Paragraph(escape(lead), body), Paragraph("How I Investigated", subhead), Paragraph(escape(initial_reason or "I began by making a prediction and identifying the evidence needed to test it."), body), Paragraph("The Numerical Evidence", subhead), Paragraph(escape(evidence_summary), body), Paragraph("My Calculations", subhead), Paragraph(escape(math_work), body), Paragraph("What the Numbers Mean", subhead), Paragraph(escape(interpretation), body), Paragraph("The Other Side of the Argument", subhead), Paragraph(escape(limitation), body), Paragraph("My Final Verdict", subhead), Paragraph(escape(final_claim), body), Paragraph("Responding to the Opposition", subhead), Paragraph(escape(defense), body), Spacer(1,8), Paragraph(escape(f"Data source: {debate['source_name']} | {source_url}"), caption)]
+    story += [Paragraph(escape(lead), body), Paragraph("How I Investigated", subhead), Paragraph(escape(initial_reason or "I began by making a prediction and identifying the evidence needed to test it."), body), Paragraph("The Numerical Evidence", subhead), Paragraph(escape(evidence_summary), body), Paragraph("My Calculations", subhead), Paragraph(escape(math_work), body), Paragraph("What the Numbers Mean", subhead), Paragraph(escape(interpretation), body), Paragraph("The Other Side of the Argument", subhead), Paragraph(escape(limitation), body), Paragraph("My Final Verdict", subhead), Paragraph(escape(final_claim), body), Paragraph("Responding to the Opposition", subhead), Paragraph(escape(defense), body), Spacer(1,8), Paragraph("Investigation progress: 6 of 6 stages completed", caption), Paragraph(escape(f"Data source: {debate['source_name']} | {source_url}"), caption)]
     doc.build(story)
     buffer.seek(0)
     return buffer.getvalue()
@@ -1314,6 +1403,8 @@ def render_claim_debate_lab_v2(teacher_mode):
     </div>
     """, unsafe_allow_html=True)
 
+    render_claim_progress(d, support)
+
     st.markdown("### Step 1 — Make an initial claim")
     initial = st.radio(
         "Before researching, what do you predict?",
@@ -1485,7 +1576,6 @@ def render_claim_debate_lab_v2(teacher_mode):
             "Final argument written": bool(final_claim.strip()), "Challenge answered": bool(defense.strip()),
         }
         completed = sum(checklist.values())
-        st.progress(completed/len(checklist), text=f"Investigation checklist: {completed}/{len(checklist)} complete")
 
         if teacher_mode or completed == len(checklist):
             st.markdown("### Step 7 — Publish your sports news article")
@@ -1943,7 +2033,7 @@ st.markdown("""
   <div class="studio-step">Sports by the Numbers</div>
   <h1 style="margin:.2rem 0 .35rem;">📊 Sports Data Studio</h1>
   <p style="margin:0;">Enter it. Graph it. Analyze it. Defend it.</p>
-  <span class="build-badge">Teacher Builder v2 + Mobile build 2026.09.21</span>
+  <span class="build-badge">Progress Tracker + Teacher Builder build 2026.09.21</span>
 </div>
 """,unsafe_allow_html=True)
 
