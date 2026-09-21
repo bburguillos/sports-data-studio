@@ -1,4 +1,7 @@
 
+import base64
+import binascii
+import json
 import math
 import random
 import statistics
@@ -748,6 +751,109 @@ for claim_id,sport,kind,player_a,player_b,metric,unit,question in ADDITIONAL_CLA
     DEBATES.append({"id":claim_id,"sport":sport,"kind":kind,"a":player_a,"b":player_b,"metric":metric,"unit":unit,"question":question,"research":research,"why":why,"source_name":source_name,"source_url":source_url})
 
 
+ASSIGNMENT_LEVELS = {
+    "Rookie": "Training Mode",
+    "Pro": "Coach Mode",
+    "All-Star": "Independent Mode",
+}
+
+
+def make_assignment_code(debate_id, level):
+    payload = json.dumps(
+        {"version": 1, "claim": debate_id, "level": level},
+        separators=(",", ":")
+    ).encode("utf-8")
+    token = base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
+    return "SDS1-" + token
+
+
+def parse_assignment_code(code):
+    compact = "".join(str(code or "").split())
+    if not compact.upper().startswith("SDS1-"):
+        return None, "That code should begin with SDS1-."
+    token = compact[5:]
+    try:
+        token += "=" * (-len(token) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(token.encode("ascii")).decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError, binascii.Error):
+        return None, "That assignment code could not be read. Copy the entire code and try again."
+    debate_ids = {debate["id"] for debate in DEBATES}
+    if payload.get("version") != 1 or payload.get("claim") not in debate_ids:
+        return None, "That code does not match an available Sports Data Studio claim."
+    if payload.get("level") not in ASSIGNMENT_LEVELS:
+        return None, "That code contains an unsupported difficulty level."
+    return {
+        "claim": payload["claim"],
+        "level": payload["level"],
+        "code": make_assignment_code(payload["claim"], payload["level"]),
+    }, None
+
+
+def render_assignment_controls(teacher_mode, mode):
+    active = st.session_state.get("active_assignment")
+
+    if teacher_mode:
+        with st.expander("📋 Create a Student Assignment", expanded=False):
+            left, right = st.columns(2)
+            sports = sorted({debate["sport"] for debate in DEBATES})
+            with left:
+                assignment_sport = st.selectbox("Assignment sport", sports, key="assignment_sport")
+                level = st.selectbox(
+                    "Difficulty level",
+                    list(ASSIGNMENT_LEVELS),
+                    index=1,
+                    key="assignment_level",
+                    help="Rookie gives the most guidance; All-Star asks students to plan more independently."
+                )
+            claim_pool = [debate for debate in DEBATES if debate["sport"] == assignment_sport]
+            claim_ids = [debate["id"] for debate in claim_pool]
+            if st.session_state.get("assignment_claim") not in claim_ids:
+                st.session_state["assignment_claim"] = claim_ids[0]
+            with right:
+                claim_id = st.selectbox(
+                    "Assigned claim",
+                    claim_ids,
+                    key="assignment_claim",
+                    format_func=lambda selected: next(
+                        debate["question"] for debate in DEBATES if debate["id"] == selected
+                    )
+                )
+                st.caption(f"Student support setting: **{ASSIGNMENT_LEVELS[level]}**")
+            code = make_assignment_code(claim_id, level)
+            st.write("**Share this code with students:**")
+            st.code(code, language=None)
+            st.caption("Students open this same app, expand **Open a Teacher Assignment**, and paste the code.")
+            if st.button("Preview This Assignment", use_container_width=True, key="preview_assignment"):
+                st.session_state["active_assignment"] = {"claim": claim_id, "level": level, "code": code}
+                active = st.session_state["active_assignment"]
+    else:
+        with st.expander("📥 Open a Teacher Assignment", expanded=not bool(active)):
+            entered_code = st.text_input(
+                "Assignment code",
+                key="student_assignment_code",
+                placeholder="Paste the SDS1- code from your teacher"
+            )
+            if st.button("Open Assignment", use_container_width=True, key="open_assignment"):
+                parsed, error = parse_assignment_code(entered_code)
+                if error:
+                    st.error(error)
+                else:
+                    st.session_state["active_assignment"] = parsed
+                    active = parsed
+                    st.success("Assignment opened. Continue in Claim & Debate Lab.")
+
+    if active:
+        debate = next((item for item in DEBATES if item["id"] == active.get("claim")), None)
+        if debate:
+            st.info(f"📌 Active assignment · **{active['level']}** · {debate['question']}")
+            if mode != "Claim & Debate Lab":
+                st.caption("Select **Claim & Debate Lab** above to complete this assignment.")
+            if st.button("Leave Assignment", key="leave_assignment"):
+                st.session_state.pop("active_assignment", None)
+        else:
+            st.session_state.pop("active_assignment", None)
+
+
 def parse_one_number(value):
     cleaned = str(value or "").replace(",", "").replace("%", "").strip()
     if not cleaned:
@@ -862,7 +968,8 @@ def render_mmm_calculator(key, special_values=None):
 
 def build_news_pdf(debate, author, class_period, time_period, final_side, headline,
                    initial_reason, evidence_summary, math_work, interpretation,
-                   limitation, final_claim, defense, source_url, image_a=None, image_b=None):
+                   limitation, final_claim, defense, source_url, image_a=None, image_b=None,
+                   assignment=None):
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=46, leftMargin=46, topMargin=42, bottomMargin=42)
     styles = getSampleStyleSheet()
@@ -874,6 +981,9 @@ def build_news_pdf(debate, author, class_period, time_period, final_side, headli
     caption = ParagraphStyle("PhotoCaption", parent=styles["Normal"], fontSize=8.5, leading=10, textColor=colors.HexColor("#475569"), alignment=TA_CENTER)
 
     story = [Paragraph(f"SPORTS DATA STUDIO | {escape(debate['sport'].upper())}", kicker), Paragraph(escape(headline or f"The Numbers Make the Case for {final_side}"), title_style), Paragraph(escape(f"By {author or 'Student Reporter'} | Class {class_period or '—'} | {date.today().strftime('%B %d, %Y')}"), byline)]
+    if assignment:
+        story.append(Paragraph(escape(f"Teacher assignment | Level: {assignment['level']} | Code: {assignment['code']}"), caption))
+        story.append(Spacer(1, 8))
 
     image_cells = []
     for uploaded, player in [(image_a, debate["a"]), (image_b, debate["b"])]:
@@ -1133,27 +1243,35 @@ def render_claim_debate_lab_v2(teacher_mode):
     st.markdown("## 🗣️ Claim & Debate Lab")
     st.write("Research real athlete data, complete your own calculations, and defend the conclusion like a sports reporter.")
 
-    c1,c2 = st.columns([1,2])
-    with c1:
-        support = st.selectbox("Support level", ["Training Mode", "Coach Mode", "Independent Mode"], key="v2_support")
-        sports = ["All Sports"] + sorted({d["sport"] for d in DEBATES})
-        sport = st.selectbox("Sport", sports, key="v2_sport")
-    pool = DEBATES if sport == "All Sports" else [d for d in DEBATES if d["sport"] == sport]
-    valid_ids = [d["id"] for d in pool]
-    if st.session_state.get("v2_selected_debate_id") not in valid_ids:
-        st.session_state["v2_selected_debate_id"] = valid_ids[0]
-    with c2:
-        st.selectbox(
-            "Choose a real-player debate", valid_ids, key="v2_selected_debate_id",
-            format_func=lambda x: next(d["question"] for d in DEBATES if d["id"] == x)
-        )
-        def pick_v2():
-            current = st.session_state.get("v2_selected_debate_id")
-            choices = [x for x in valid_ids if x != current] or valid_ids
-            st.session_state["v2_selected_debate_id"] = random.choice(choices)
-        st.button("🎲 Give Me Another Debate", use_container_width=True, on_click=pick_v2, key="v2_random")
+    assignment = st.session_state.get("active_assignment")
+    if assignment and any(item["id"] == assignment.get("claim") for item in DEBATES):
+        d = next(item for item in DEBATES if item["id"] == assignment["claim"])
+        support = ASSIGNMENT_LEVELS[assignment["level"]]
+        st.success(f"Teacher assignment loaded · **{assignment['level']} level** · {support}")
+        st.caption("The assigned claim and support level are locked. Use **Leave Assignment** above to return to open exploration.")
+    else:
+        assignment = None
+        c1,c2 = st.columns([1,2])
+        with c1:
+            support = st.selectbox("Support level", ["Training Mode", "Coach Mode", "Independent Mode"], key="v2_support")
+            sports = ["All Sports"] + sorted({d["sport"] for d in DEBATES})
+            sport = st.selectbox("Sport", sports, key="v2_sport")
+        pool = DEBATES if sport == "All Sports" else [d for d in DEBATES if d["sport"] == sport]
+        valid_ids = [d["id"] for d in pool]
+        if st.session_state.get("v2_selected_debate_id") not in valid_ids:
+            st.session_state["v2_selected_debate_id"] = valid_ids[0]
+        with c2:
+            st.selectbox(
+                "Choose a real-player debate", valid_ids, key="v2_selected_debate_id",
+                format_func=lambda x: next(d["question"] for d in DEBATES if d["id"] == x)
+            )
+            def pick_v2():
+                current = st.session_state.get("v2_selected_debate_id")
+                choices = [x for x in valid_ids if x != current] or valid_ids
+                st.session_state["v2_selected_debate_id"] = random.choice(choices)
+            st.button("🎲 Give Me Another Debate", use_container_width=True, on_click=pick_v2, key="v2_random")
 
-    d = next(item for item in DEBATES if item["id"] == st.session_state["v2_selected_debate_id"])
+        d = next(item for item in DEBATES if item["id"] == st.session_state["v2_selected_debate_id"])
     st.markdown(f"""
     <div class="studio-card">
       <div class="studio-step">{d['sport']} Investigation</div>
@@ -1350,7 +1468,8 @@ def render_claim_debate_lab_v2(teacher_mode):
                 pdf_bytes = build_news_pdf(
                     d, author, class_period, period, final_side, headline,
                     initial_reason, evidence_summary, math_work, interpretation,
-                    limitation, final_claim, defense, d["source_url"], image_a, image_b
+                    limitation, final_claim, defense, d["source_url"], image_a, image_b,
+                    assignment=assignment
                 )
                 st.download_button("📰 Download My Sports News Article (PDF)", pdf_bytes, file_name=f"sports_news_{d['id']}.pdf", mime="application/pdf", use_container_width=True)
             else:
@@ -1790,7 +1909,7 @@ st.markdown("""
   <div class="studio-step">Sports by the Numbers</div>
   <h1 style="margin:.2rem 0 .35rem;">📊 Sports Data Studio</h1>
   <p style="margin:0;">Enter it. Graph it. Analyze it. Defend it.</p>
-  <span class="build-badge">Mobile + Light UI build 2026.09.21</span>
+  <span class="build-badge">Assignment + Mobile build 2026.09.21</span>
 </div>
 """,unsafe_allow_html=True)
 
@@ -1799,11 +1918,14 @@ with top1:
     mode=st.radio(
         "Choose a Data Studio mode",
         ["Claim & Debate Lab","Analyze One Data Set","Compare Two Groups","Change Over Time","Categorical Data"],
-        horizontal=True
+        horizontal=True,
+        key="studio_mode"
     )
 with top2:
     teacher_mode=st.toggle("🛠️ Teacher Mode",value=False)
     st.caption("Teacher Mode reveals results immediately. Student Mode requires predictions first.")
+
+render_assignment_controls(teacher_mode, mode)
 
 # Keep each mode's prediction lock separate. Switching modes does not carry a reveal state over.
 if "last_studio_mode" not in st.session_state:
