@@ -999,6 +999,126 @@ def math_directions(kind, lower_is_better=False):
     ]
 
 
+def calculate_claim_math_grade(debate):
+    claim_id = debate["id"]
+    value = lambda key: str(st.session_state.get(key, "") or "").strip()
+    items = []
+
+    def add_item(label, key, expected, basic_hint, detailed_hint):
+        entered_text = value(key)
+        entered_number = parse_one_number(entered_text)
+        correct = entered_number is not None and abs(entered_number - expected) <= .5
+        items.append({
+            "label": label,
+            "entered": entered_text or "blank",
+            "expected": expected,
+            "correct": correct,
+            "basic_hint": basic_hint,
+            "detailed_hint": detailed_hint,
+        })
+
+    if debate["kind"] in ("typical", "typical_low", "consistency"):
+        race_codes = {"DNF":22} if debate["sport"] == "Formula 1" else None
+        a_values,_ = parse_numeric_text(value(f"v2_data_a_{claim_id}"), special_values=race_codes)
+        b_values,_ = parse_numeric_text(value(f"v2_data_b_{claim_id}"), special_values=race_codes)
+        if not a_values or not b_values:
+            return None
+        measures = ["Mean", "Median"] if debate["kind"] != "consistency" else ["Mean", "Range", "MAD"]
+        for player,prefix,values in [(debate["a"],"a",a_values),(debate["b"],"b",b_values)]:
+            ordered = sorted(values)
+            summary = numerical_summary(values)
+            for measure in measures:
+                expected = summary[measure.lower()]
+                if measure == "Mean":
+                    basic = "Add every value, then divide by the number of values."
+                    detailed = f"Your {len(values)} values add to {fmt(sum(values))}. Set up {fmt(sum(values))} ÷ {len(values)}."
+                elif measure == "Median":
+                    basic = "Put the values in order and locate the middle."
+                    detailed = "Ordered data: " + ", ".join(fmt(number) for number in ordered) + ". Use the middle value, or average the two middle values."
+                elif measure == "Range":
+                    basic = "Subtract the minimum value from the maximum value."
+                    detailed = f"Use maximum − minimum: {fmt(max(values))} − {fmt(min(values))}."
+                else:
+                    basic = "Find each value's positive distance from the mean, add the distances, and divide by the number of values."
+                    detailed = f"Use mean {fmt(summary['mean'])}. Find all absolute deviations, add them, then divide by {len(values)}."
+                add_item(f"{player} — {measure}", f"v2_calc_{prefix}_{measure}_{claim_id}", expected, basic, detailed)
+    else:
+        a_first = parse_one_number(value(f"v2_a_first_{claim_id}"))
+        a_total = parse_one_number(value(f"v2_a_total_{claim_id}"))
+        b_first = parse_one_number(value(f"v2_b_first_{claim_id}"))
+        b_total = parse_one_number(value(f"v2_b_total_{claim_id}"))
+        if None in (a_first,a_total,b_first,b_total) or a_total <= 0 or b_total <= 0:
+            return None
+        a_rate = a_first/a_total*100
+        b_rate = b_first/b_total*100
+        label = "relative frequency" if debate["kind"] == "frequency" else "percentage"
+        add_item(
+            f"{debate['a']} — {label}", f"v2_a_pct_{claim_id}", a_rate,
+            "Divide successful or qualifying outcomes by the total, then multiply by 100.",
+            f"Set up {fmt(a_first)} ÷ {fmt(a_total)} × 100. Be sure the final answer is a percent, not a decimal."
+        )
+        add_item(
+            f"{debate['b']} — {label}", f"v2_b_pct_{claim_id}", b_rate,
+            "Divide successful or qualifying outcomes by the total, then multiply by 100.",
+            f"Set up {fmt(b_first)} ÷ {fmt(b_total)} × 100. Be sure the final answer is a percent, not a decimal."
+        )
+        add_item(
+            "Difference in percentage points", f"v2_pp_{claim_id}", abs(a_rate-b_rate),
+            "Subtract the smaller percentage from the larger percentage.",
+            f"Use the two rates from the first steps and calculate larger − smaller. This is percentage points, not percent change."
+        )
+
+    correct = sum(item["correct"] for item in items)
+    total = len(items)
+    ratio = correct/total if total else 0
+    rubric_score = 4 if ratio == 1 else 3 if ratio >= .75 else 2 if ratio >= .5 else 1
+    return {
+        "items": items,
+        "correct": correct,
+        "total": total,
+        "all_correct": correct == total and total > 0,
+        "rubric_score": rubric_score,
+    }
+
+
+def render_rookie_math_feedback(debate, grade):
+    if not grade:
+        return
+    claim_id = debate["id"]
+    attempts_key = f"v2_math_attempts_{claim_id}"
+    shown_key = f"v2_math_feedback_{claim_id}"
+    if st.button("🏀 Check My Calculations", key=f"v2_check_math_{claim_id}", use_container_width=True):
+        st.session_state[attempts_key] = st.session_state.get(attempts_key, 0) + 1
+        st.session_state[shown_key] = True
+    if not st.session_state.get(shown_key):
+        st.caption("Rookie Mode lets you check the calculations and revise mistakes before continuing.")
+        return
+    attempts = st.session_state.get(attempts_key, 1)
+    if grade["all_correct"]:
+        st.success(f"All {grade['total']} calculations are correct. You are ready to interpret the evidence.")
+    else:
+        st.warning(f"{grade['correct']} of {grade['total']} calculations are correct. Revise the items marked ‘Try again.’")
+    for item in grade["items"]:
+        if item["correct"]:
+            st.success(f"✓ {item['label']}: correct")
+        else:
+            hint = item["detailed_hint"] if attempts >= 2 else item["basic_hint"]
+            st.warning(f"↻ {item['label']}: Try again. {hint}")
+
+
+def render_submitted_math_review(grade):
+    if not grade:
+        st.warning("The math review could not run because required data or calculations are missing.")
+        return
+    st.markdown("### Submitted Math Review")
+    st.info(f"Verified calculations: **{grade['correct']} of {grade['total']} correct** · Suggested Mathematical Process rubric score: **{grade['rubric_score']}/4**")
+    for item in grade["items"]:
+        if item["correct"]:
+            st.write(f"✅ **{item['label']}** — correct")
+        else:
+            st.write(f"❌ **{item['label']}** — entered {item['entered']}; correct result: {fmt(item['expected'])}. {item['basic_hint']}")
+
+
 def claim_progress_snapshot(debate, support):
     claim_id = debate["id"]
     value = lambda key: str(st.session_state.get(key, "") or "").strip()
@@ -1030,7 +1150,11 @@ def claim_progress_snapshot(debate, support):
         f"v2_final_{claim_id}", f"v2_defense_{claim_id}",
     ]
     interpretation_done = math_done and all(value(key) for key in interpretation_fields)
-    article_done = interpretation_done and bool(value(f"v2_author_{claim_id}"))
+    article_done = (
+        interpretation_done
+        and bool(value(f"v2_author_{claim_id}"))
+        and bool(st.session_state.get(f"v2_submitted_{claim_id}"))
+    )
 
     stages = [
         ("Prediction", prediction_done, "Explain your initial prediction."),
@@ -1092,7 +1216,7 @@ def render_mmm_calculator(key, special_values=None):
 def build_news_pdf(debate, author, class_period, time_period, final_side, headline,
                    initial_reason, evidence_summary, math_work, interpretation,
                    limitation, final_claim, defense, source_url, image_a=None, image_b=None,
-                   assignment=None):
+                   assignment=None, math_grade=None):
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=letter, rightMargin=46, leftMargin=46, topMargin=42, bottomMargin=42)
     styles = getSampleStyleSheet()
@@ -1128,6 +1252,90 @@ def build_news_pdf(debate, author, class_period, time_period, final_side, headli
 
     lead = f"After examining {debate['metric']} from {time_period or 'the selected time period'}, I believe {final_side} has the stronger statistical case. My investigation began with this question: {debate['question']}"
     story += [Paragraph(escape(lead), body), Paragraph("How I Investigated", subhead), Paragraph(escape(initial_reason or "I began by making a prediction and identifying the evidence needed to test it."), body), Paragraph("The Numerical Evidence", subhead), Paragraph(escape(evidence_summary), body), Paragraph("My Calculations", subhead), Paragraph(escape(math_work), body), Paragraph("What the Numbers Mean", subhead), Paragraph(escape(interpretation), body), Paragraph("The Other Side of the Argument", subhead), Paragraph(escape(limitation), body), Paragraph("My Final Verdict", subhead), Paragraph(escape(final_claim), body), Paragraph("Responding to the Opposition", subhead), Paragraph(escape(defense), body), Spacer(1,8), Paragraph("Investigation progress: 6 of 6 stages completed", caption), Paragraph(escape(f"Data source: {debate['source_name']} | {source_url}"), caption)]
+
+    story += [PageBreak(), Paragraph("Teacher Review & Rubric", title_style)]
+    story.append(Paragraph(
+        escape(f"Student: {author or '—'} | Class: {class_period or '—'} | Claim: {debate['question']}"),
+        byline
+    ))
+    story.append(Paragraph("Completion Summary", subhead))
+    stage_names = ["Prediction", "Research", "Data", "Math", "Interpretation", "Article"]
+    completion_table = Table(
+        [[Paragraph(f"<b>{escape(stage)}</b>", caption) for stage in stage_names],
+         [Paragraph("✓ Complete", caption) for _ in stage_names]],
+        colWidths=[1.08*72]*6
+    )
+    completion_table.setStyle(TableStyle([
+        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#DBEAFE")),
+        ("BACKGROUND",(0,1),(-1,1),colors.HexColor("#DCFCE7")),
+        ("BOX",(0,0),(-1,-1),1,colors.HexColor("#64748B")),
+        ("INNERGRID",(0,0),(-1,-1),.5,colors.HexColor("#94A3B8")),
+        ("ALIGN",(0,0),(-1,-1),"CENTER"),
+        ("VALIGN",(0,0),(-1,-1),"MIDDLE"),
+        ("TOPPADDING",(0,0),(-1,-1),7),
+        ("BOTTOMPADDING",(0,0),(-1,-1),7),
+    ]))
+    story += [completion_table, Spacer(1,10)]
+    if math_grade:
+        story.append(Paragraph(
+            f"<b>Automatic math verification:</b> {math_grade['correct']} of {math_grade['total']} calculations correct. "
+            f"Suggested Mathematical Process score: {math_grade['rubric_score']}/4. The teacher may override this score.",
+            body
+        ))
+    story.append(Paragraph("Teacher-Scored Rubric", subhead))
+
+    rubric_rows = [
+        ("Research & Data", "Uses a relevant source, identifies the time period, and collects fair matching data for both athletes."),
+        ("Mathematical Process", "Shows the required calculations, uses the appropriate statistical measure, and labels results clearly."),
+        ("Statistical Interpretation", "Explains what the numbers mean and considers variability, outliers, sample size, or another limitation."),
+        ("Claim & Article", "Makes an evidence-based final claim, responds to the opposing view, and communicates clearly as a sports reporter."),
+    ]
+    rubric_data = [[
+        Paragraph("<b>Criterion</b>", body),
+        Paragraph("<b>What to evaluate</b>", body),
+        Paragraph("<b>Score</b>", body),
+    ]]
+    for criterion,description in rubric_rows:
+        score_text = "_____ / 4"
+        if criterion == "Mathematical Process" and math_grade:
+            score_text = f"{math_grade['rubric_score']} / 4 (auto)"
+        rubric_data.append([
+            Paragraph(f"<b>{escape(criterion)}</b>", body),
+            Paragraph(escape(description), body),
+            Paragraph(score_text, body),
+        ])
+    rubric_data.append([
+        Paragraph("<b>Total</b>", body),
+        Paragraph("Four criteria worth 4 points each", body),
+        Paragraph("_____ / 16", body),
+    ])
+    rubric_table = Table(rubric_data, colWidths=[1.55*72,4.05*72,.9*72], repeatRows=1)
+    rubric_table.setStyle(TableStyle([
+        ("BACKGROUND",(0,0),(-1,0),colors.HexColor("#0F2747")),
+        ("TEXTCOLOR",(0,0),(-1,0),colors.white),
+        ("BACKGROUND",(0,-1),(-1,-1),colors.HexColor("#EAF2FF")),
+        ("BOX",(0,0),(-1,-1),1,colors.HexColor("#475569")),
+        ("INNERGRID",(0,0),(-1,-1),.5,colors.HexColor("#94A3B8")),
+        ("VALIGN",(0,0),(-1,-1),"TOP"),
+        ("ALIGN",(-1,1),(-1,-1),"CENTER"),
+        ("TOPPADDING",(0,0),(-1,-1),7),
+        ("BOTTOMPADDING",(0,0),(-1,-1),7),
+        ("LEFTPADDING",(0,0),(-1,-1),7),
+        ("RIGHTPADDING",(0,0),(-1,-1),7),
+    ]))
+    story += [rubric_table, Spacer(1,12)]
+    story.append(Paragraph(
+        "<b>Scoring guide:</b> 4 = complete, accurate, and well supported; "
+        "3 = mostly complete with a minor issue; 2 = partially complete or needs correction; "
+        "1 = limited evidence or major pieces missing.",
+        body
+    ))
+    story += [
+        Paragraph("Teacher Comments", subhead),
+        Paragraph("________________________________________________________________________________", body),
+        Paragraph("________________________________________________________________________________", body),
+        Paragraph("________________________________________________________________________________", body),
+    ]
     doc.build(story)
     buffer.seek(0)
     return buffer.getvalue()
@@ -1527,6 +1735,10 @@ def render_claim_debate_lab_v2(teacher_mode):
                 math_ready = all(str(x).strip() for x in [a_pct,b_pct,pp_diff,math_work])
                 evidence_summary = f"{d['a']}: {a_first:g}/{a_total:g}, calculated rate {a_pct}; {d['b']}: {b_first:g}/{b_total:g}, calculated rate {b_pct}; difference: {pp_diff} percentage points."
 
+    math_grade = calculate_claim_math_grade(d)
+    if support == "Training Mode" and math_grade:
+        render_rookie_math_feedback(d, math_grade)
+
     render_mmm_calculator(d["id"], special_values={"DNF":22} if d["sport"] == "Formula 1" else None)
 
     if math_ready:
@@ -1588,16 +1800,28 @@ def render_claim_debate_lab_v2(teacher_mode):
                 class_period = st.text_input("Class period", key=f"v2_class_{d['id']}")
                 st.caption("Use photos you have permission to use. Without uploads, the PDF uses player-initial cards.")
                 image_b = st.file_uploader(f"Optional photo of {d['b']}", type=["png","jpg","jpeg"], key=f"v2_image_b_{d['id']}")
+            submitted_key = f"v2_submitted_{d['id']}"
             if author.strip():
+                submit_label = "🔒 Submit Investigation & Create PDF" if not st.session_state.get(submitted_key) else "🔄 Re-submit Updated Investigation"
+                if st.button(submit_label, key=f"v2_submit_{d['id']}", use_container_width=True):
+                    st.session_state[submitted_key] = True
+                    st.rerun()
+
+            if author.strip() and st.session_state.get(submitted_key):
+                math_grade = calculate_claim_math_grade(d)
+                if support == "Training Mode":
+                    st.success(f"Math verified before submission: {math_grade['correct']} of {math_grade['total']} correct.")
+                else:
+                    render_submitted_math_review(math_grade)
                 pdf_bytes = build_news_pdf(
                     d, author, class_period, period, final_side, headline,
                     initial_reason, evidence_summary, math_work, interpretation,
                     limitation, final_claim, defense, d["source_url"], image_a, image_b,
-                    assignment=assignment
+                    assignment=assignment, math_grade=math_grade
                 )
                 st.download_button("📰 Download My Sports News Article (PDF)", pdf_bytes, file_name=f"sports_news_{d['id']}.pdf", mime="application/pdf", use_container_width=True)
             else:
-                st.info("Enter the reporter name to create the PDF article.")
+                st.info("Enter the reporter name, then submit the investigation to create the PDF article.")
 
 
 def standardize_categories(values, ignore_case=True):
@@ -2033,7 +2257,7 @@ st.markdown("""
   <div class="studio-step">Sports by the Numbers</div>
   <h1 style="margin:.2rem 0 .35rem;">📊 Sports Data Studio</h1>
   <p style="margin:0;">Enter it. Graph it. Analyze it. Defend it.</p>
-  <span class="build-badge">Progress Tracker + Teacher Builder build 2026.09.21</span>
+  <span class="build-badge">PDF Rubric + Progress Tracker build 2026.09.21</span>
 </div>
 """,unsafe_allow_html=True)
 
