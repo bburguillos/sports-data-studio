@@ -839,16 +839,33 @@ def render_assignment_controls(teacher_mode, mode):
                     )
                 )
                 st.caption(f"Student support setting: **{ASSIGNMENT_LEVELS[level]}**")
-            code = make_assignment_code(claim_id, level)
-            st.write("**Share this code with students:**")
-            st.code(code, language=None)
-            st.caption("Students open this same app, expand **Open a Teacher Assignment**, and enter this short code.")
+
+            created = st.session_state.get("created_teacher_assignment")
+            if created and (created.get("claim") != claim_id or created.get("level") != level):
+                st.session_state.pop("created_teacher_assignment", None)
+                created = None
+                st.info("The assignment settings changed. Press **Create Assignment** to generate the new code.")
+
+            if st.button("✅ Create Assignment", use_container_width=True, key="create_teacher_assignment"):
+                created = {
+                    "claim": claim_id,
+                    "level": level,
+                    "code": make_assignment_code(claim_id, level),
+                }
+                st.session_state["created_teacher_assignment"] = created
+
+            if created:
+                st.success("Assignment created! Share this code with students:")
+                st.code(created["code"], language=None)
+                st.caption("Students open this same app, expand **Open a Teacher Assignment**, and enter the code.")
+            else:
+                st.caption("The student code will appear here after you press **Create Assignment**.")
     else:
         with st.expander("📥 Open a Teacher Assignment", expanded=not bool(active)):
             entered_code = st.text_input(
                 "Assignment code",
                 key="student_assignment_code",
-                placeholder="Paste the SDS1- code from your teacher"
+                placeholder="Enter the SDS- code from your teacher"
             )
             if st.button("Open Assignment", use_container_width=True, key="open_assignment"):
                 parsed, error = parse_assignment_code(entered_code)
@@ -1926,7 +1943,7 @@ st.markdown("""
   <div class="studio-step">Sports by the Numbers</div>
   <h1 style="margin:.2rem 0 .35rem;">📊 Sports Data Studio</h1>
   <p style="margin:0;">Enter it. Graph it. Analyze it. Defend it.</p>
-  <span class="build-badge">Teacher Builder + Mobile build 2026.09.21</span>
+  <span class="build-badge">Teacher Builder v2 + Mobile build 2026.09.21</span>
 </div>
 """,unsafe_allow_html=True)
 
