@@ -815,7 +815,13 @@ ASSIGNMENT_LEVEL_CODES = {"Rookie": "R", "Pro": "P", "All-Star": "A"}
 ASSIGNMENT_CODE_LEVELS = {value: key for key, value in ASSIGNMENT_LEVEL_CODES.items()}
 
 
-def make_assignment_code(debate_id, level):
+def make_assignment_code(debate_id, level, periods=None):
+    periods = [str(item).strip() for item in (periods or []) if str(item).strip()]
+    periods = list(dict.fromkeys(periods))[:8]
+    if periods:
+        payload = {"version": 1, "claim": debate_id, "level": level, "periods": periods}
+        token = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode("utf-8")).decode("ascii").rstrip("=")
+        return f"SDS1-{token}"
     debate_ids = [debate["id"] for debate in DEBATES]
     claim_number = debate_ids.index(debate_id) + 1
     level_code = ASSIGNMENT_LEVEL_CODES[level]
@@ -859,7 +865,8 @@ def parse_assignment_code(code):
     return {
         "claim": payload["claim"],
         "level": payload["level"],
-        "code": make_assignment_code(payload["claim"], payload["level"]),
+        "periods": [str(item).strip() for item in payload.get("periods", []) if str(item).strip()][:8],
+        "code": original,
     }, None
 
 
@@ -894,8 +901,19 @@ def render_assignment_controls(teacher_mode, mode):
                 )
                 st.caption(f"Student support setting: **{ASSIGNMENT_LEVELS[level]}**")
 
+            st.markdown("**Student class-period choices**")
+            st.caption("Enter the choices students should select from. Leave these blank if you want students to type their period.")
+            period_choices = []
+            for row_start in (1, 5):
+                period_boxes = st.columns(4)
+                for offset, column in enumerate(period_boxes):
+                    number = row_start + offset
+                    with column:
+                        period_choices.append(st.text_input(f"Choice {number}", key=f"assignment_period_{number}", placeholder=f"Period {number}"))
+            period_choices = list(dict.fromkeys(item.strip() for item in period_choices if item.strip()))
+
             created = st.session_state.get("created_teacher_assignment")
-            if created and (created.get("claim") != claim_id or created.get("level") != level):
+            if created and (created.get("claim") != claim_id or created.get("level") != level or created.get("periods", []) != period_choices):
                 st.session_state.pop("created_teacher_assignment", None)
                 created = None
                 st.info("The assignment settings changed. Press **Create Assignment** to generate the new code.")
@@ -904,7 +922,8 @@ def render_assignment_controls(teacher_mode, mode):
                 created = {
                     "claim": claim_id,
                     "level": level,
-                    "code": make_assignment_code(claim_id, level),
+                    "periods": period_choices,
+                    "code": make_assignment_code(claim_id, level, period_choices),
                 }
                 st.session_state["created_teacher_assignment"] = created
 
@@ -2008,7 +2027,11 @@ def render_claim_debate_lab_v2(teacher_mode):
                 headline = st.text_input("Article headline", value=f"The Numbers Make the Case for {final_side}", key=f"v2_headline_{d['id']}")
                 image_a = st.file_uploader(f"Optional photo of {d['a']}", type=["png","jpg","jpeg"], key=f"v2_image_a_{d['id']}")
             with p2:
-                class_period = st.text_input("Class period", key=f"v2_class_{d['id']}")
+                assignment_periods = assignment.get("periods", []) if assignment else []
+                if assignment_periods:
+                    class_period = st.selectbox("Class period", assignment_periods, key=f"v2_class_{d['id']}")
+                else:
+                    class_period = st.text_input("Class period", key=f"v2_class_{d['id']}")
                 st.caption("Use photos you have permission to use. Without uploads, the PDF uses player-initial cards.")
                 image_b = st.file_uploader(f"Optional photo of {d['b']}", type=["png","jpg","jpeg"], key=f"v2_image_b_{d['id']}")
             submitted_key = f"v2_submitted_{d['id']}"
