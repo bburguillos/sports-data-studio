@@ -4,12 +4,15 @@ import binascii
 import json
 import math
 import random
+import secrets
 import statistics
 import zlib
 from collections import Counter
 from datetime import date
 from html import escape
 from io import BytesIO
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 import numpy as np
 import pandas as pd
@@ -23,6 +26,61 @@ from reportlab.lib.utils import ImageReader
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, PageBreak
 
 st.set_page_config(page_title="Sports Data Studio", page_icon="📊", layout="wide")
+
+
+def cloud_config():
+    """Return Supabase REST settings without breaking local/offline copies."""
+    try:
+        url = str(st.secrets.get("SUPABASE_URL", "")).strip().rstrip("/")
+        key = str(st.secrets.get("SUPABASE_ANON_KEY", "")).strip()
+    except Exception:
+        url, key = "", ""
+    return url, key
+
+
+def cloud_ready():
+    return all(cloud_config())
+
+
+def cloud_rpc(function_name, payload):
+    """Call one narrowly scoped database function through Supabase REST."""
+    url, key = cloud_config()
+    if not url or not key:
+        raise RuntimeError("Automatic submissions are not connected yet.")
+    request = Request(
+        f"{url}/rest/v1/rpc/{function_name}",
+        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "apikey": key,
+            "Authorization": f"Bearer {key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=15) as response:
+            body = response.read().decode("utf-8")
+            return json.loads(body) if body.strip() else None
+    except HTTPError as exc:
+        try:
+            detail = json.loads(exc.read().decode("utf-8")).get("message", "")
+        except Exception:
+            detail = ""
+        raise RuntimeError(detail or "The submission service rejected the request.") from exc
+    except (URLError, TimeoutError) as exc:
+        raise RuntimeError("The submission service could not be reached. Check the internet connection and try again.") from exc
+
+
+def make_online_assignment_code():
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    token = "".join(secrets.choice(alphabet) for _ in range(10))
+    return f"SDS2-{token}"
+
+
+def make_teacher_key():
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+    parts = ["".join(secrets.choice(alphabet) for _ in range(5)) for _ in range(3)]
+    return "-".join(parts)
 
 st.markdown("""
 <style>
@@ -919,18 +977,47 @@ def render_assignment_controls(teacher_mode, mode):
                 st.info("The assignment settings changed. Press **Create Assignment** to generate the new code.")
 
             if st.button("✅ Create Assignment", use_container_width=True, key="create_teacher_assignment"):
-                created = {
-                    "claim": claim_id,
-                    "level": level,
-                    "periods": period_choices,
-                    "code": make_assignment_code(claim_id, level, period_choices),
-                }
-                st.session_state["created_teacher_assignment"] = created
+                if cloud_ready():
+                    code = make_online_assignment_code()
+                    teacher_key = make_teacher_key()
+                    try:
+                        cloud_rpc("create_sports_assignment", {
+                            "p_assignment_code": code,
+                            "p_teacher_key": teacher_key,
+                            "p_claim_id": claim_id,
+                            "p_level": level,
+                            "p_periods": period_choices,
+                        })
+                        created = {
+                            "claim": claim_id,
+                            "level": level,
+                            "periods": period_choices,
+                            "code": code,
+                            "teacher_key": teacher_key,
+                            "online": True,
+                        }
+                        st.session_state["created_teacher_assignment"] = created
+                    except RuntimeError as exc:
+                        st.error(f"The online assignment could not be created: {exc}")
+                else:
+                    created = {
+                        "claim": claim_id,
+                        "level": level,
+                        "periods": period_choices,
+                        "code": make_assignment_code(claim_id, level, period_choices),
+                        "online": False,
+                    }
+                    st.session_state["created_teacher_assignment"] = created
 
             if created:
                 st.success("Assignment created! Share this code with students:")
                 st.code(created["code"], language=None)
-                st.caption("Students open this same app, expand **Open a Teacher Assignment**, and enter the code.")
+                if created.get("teacher_key"):
+                    st.warning("Save this private Teacher Key. Do not share it with students.")
+                    st.code(created["teacher_key"], language=None)
+                    st.caption("Students receive only the assignment code. You will use both the assignment code and Teacher Key to open their submissions.")
+                else:
+                    st.caption("Students open this same app, expand **Open a Teacher Assignment**, and enter the code. Automatic collection becomes available after the database connection is configured.")
             else:
                 st.caption("The student code will appear here after you press **Create Assignment**.")
     else:
@@ -941,7 +1028,28 @@ def render_assignment_controls(teacher_mode, mode):
                 placeholder="Enter the SDS- code from your teacher"
             )
             if st.button("Open Assignment", use_container_width=True, key="open_assignment"):
-                parsed, error = parse_assignment_code(entered_code)
+                clean_code = "".join(str(entered_code or "").split()).upper()
+                if clean_code.startswith("SDS2-"):
+                    if not cloud_ready():
+                        parsed, error = None, "Online assignments are not connected on this app yet."
+                    else:
+                        try:
+                            result = cloud_rpc("open_sports_assignment", {"p_assignment_code": clean_code})
+                            row = result[0] if isinstance(result, list) and result else result
+                            if not isinstance(row, dict):
+                                raise RuntimeError("That assignment code was not found.")
+                            parsed = {
+                                "claim": row.get("claim_id"),
+                                "level": row.get("level"),
+                                "periods": row.get("periods") or [],
+                                "code": clean_code,
+                                "online": True,
+                            }
+                            error = None
+                        except RuntimeError as exc:
+                            parsed, error = None, str(exc)
+                else:
+                    parsed, error = parse_assignment_code(entered_code)
                 if error:
                     st.error(error)
                 else:
@@ -963,22 +1071,87 @@ def render_assignment_controls(teacher_mode, mode):
 
 def render_teacher_review_dashboard():
     st.markdown("## 🧾 Teacher Review Dashboard")
-    st.caption("Upload student progress files downloaded from the Save & Resume panel to review submissions in one place.")
-    uploads = st.file_uploader(
-        "Upload student progress files",
-        type=["json"],
-        accept_multiple_files=True,
-        key="teacher_review_uploads",
-        help="Students should download their progress file after submitting. You can select several JSON files at once."
-    )
-    if not uploads:
-        st.info("No student files loaded yet. Have students submit their investigations, download their progress JSON files, then upload them here.")
-        return
-
     records = []
     errors = []
     debate_lookup = {item["id"]: item for item in DEBATES}
-    for upload in uploads:
+
+    st.markdown("### Open an assignment inbox")
+    if cloud_ready():
+        inbox_left, inbox_right = st.columns(2)
+        with inbox_left:
+            inbox_code = st.text_input(
+                "Assignment code",
+                key="teacher_inbox_code",
+                placeholder="SDS2-..."
+            ).strip().upper()
+        with inbox_right:
+            inbox_key = st.text_input(
+                "Private Teacher Key",
+                key="teacher_inbox_key",
+                type="password",
+                placeholder="XXXXX-XXXXX-XXXXX"
+            ).strip().upper()
+        load_inbox = st.button("📥 Load Submitted Work", key="load_teacher_inbox", use_container_width=True)
+        if load_inbox:
+            if not inbox_code or not inbox_key:
+                st.warning("Enter both the assignment code and the private Teacher Key.")
+            else:
+                try:
+                    result = cloud_rpc("get_sports_submissions", {
+                        "p_assignment_code": inbox_code,
+                        "p_teacher_key": inbox_key,
+                    })
+                    st.session_state["teacher_cloud_submissions"] = result if isinstance(result, list) else []
+                    st.session_state["teacher_loaded_assignment"] = inbox_code
+                except RuntimeError as exc:
+                    st.session_state.pop("teacher_cloud_submissions", None)
+                    st.error(f"The assignment inbox could not be opened: {exc}")
+
+        cloud_rows = st.session_state.get("teacher_cloud_submissions", [])
+        loaded_assignment = st.session_state.get("teacher_loaded_assignment", "")
+        if cloud_rows:
+            st.success(f"Loaded {len(cloud_rows)} submission(s) for {loaded_assignment}.")
+        elif loaded_assignment:
+            st.info(f"No students have submitted work for {loaded_assignment} yet. Use **Load Submitted Work** again to refresh.")
+
+        for cloud_row in cloud_rows:
+            payload = cloud_row.get("payload") if isinstance(cloud_row, dict) else None
+            if not isinstance(payload, dict):
+                continue
+            claim_id = payload.get("claim")
+            state = payload.get("state")
+            debate = debate_lookup.get(claim_id)
+            if not debate or not isinstance(state, dict):
+                continue
+            grade = calculate_claim_math_grade(debate, state)
+            assignment = payload.get("assignment") if isinstance(payload.get("assignment"), dict) else {}
+            records.append({
+                "file": str(cloud_row.get("submission_id") or f"cloud-{len(records)}"),
+                "student": str(cloud_row.get("student_name") or state.get(f"v2_author_{claim_id}") or "Unnamed student").strip(),
+                "class_period": str(cloud_row.get("class_period") or state.get(f"v2_class_{claim_id}") or "—").strip(),
+                "claim": debate["question"],
+                "sport": debate["sport"],
+                "assignment_code": str(assignment.get("code") or loaded_assignment),
+                "level": str(assignment.get("level") or "Open"),
+                "submitted": True,
+                "math_correct": f"{grade['correct']}/{grade['total']}" if grade else "—",
+                "suggested_math": grade["rubric_score"] if grade else 0,
+                "state": state,
+                "debate": debate,
+            })
+    else:
+        st.info("Automatic collection needs the one-time database setup. Until then, the original file-upload backup remains available below.")
+
+    with st.expander("Backup: upload saved student files"):
+        uploads = st.file_uploader(
+            "Upload student progress files",
+            type=["json"],
+            accept_multiple_files=True,
+            key="teacher_review_uploads",
+            help="This is a backup option for work completed offline."
+        )
+
+    for upload in (uploads or []):
         try:
             payload = json.loads(upload.getvalue().decode("utf-8"))
             claim_id = payload.get("claim")
@@ -1009,7 +1182,7 @@ def render_teacher_review_dashboard():
     if errors:
         st.warning("These files could not be read: " + ", ".join(errors))
     if not records:
-        st.error("No valid Sports Data Studio progress files were found.")
+        st.info("No submissions are loaded. Enter an assignment code and Teacher Key above, then choose **Load Submitted Work**.")
         return
 
     st.markdown("### 🔎 Filter submissions")
@@ -1092,7 +1265,7 @@ def render_teacher_review_dashboard():
     if student_search:
         filtered_records = [row for row in filtered_records if student_search in row["student"].casefold()]
 
-    st.caption(f"Showing **{len(filtered_records)}** of **{len(records)}** uploaded submissions.")
+    st.caption(f"Showing **{len(filtered_records)}** of **{len(records)}** submissions.")
     if not filtered_records:
         st.warning("No submissions match the current filters. Change a selection or choose **Clear all filters**.")
         return
@@ -2134,9 +2307,26 @@ def render_claim_debate_lab_v2(teacher_mode):
                 submit_label = "🔒 Submit Investigation & Create PDF" if not st.session_state.get(submitted_key) else "🔄 Re-submit Updated Investigation"
                 if st.button(submit_label, key=f"v2_submit_{d['id']}", use_container_width=True):
                     st.session_state[submitted_key] = True
+                    if assignment and assignment.get("online") and str(assignment.get("code", "")).startswith("SDS2-"):
+                        try:
+                            submission_payload = build_resume_payload(d)
+                            cloud_rpc("submit_sports_assignment", {
+                                "p_assignment_code": assignment["code"],
+                                "p_student_name": author.strip(),
+                                "p_class_period": str(class_period).strip(),
+                                "p_payload": submission_payload,
+                            })
+                            st.session_state[f"cloud_submit_notice_{d['id']}"] = "success"
+                        except RuntimeError as exc:
+                            st.session_state[f"cloud_submit_notice_{d['id']}"] = str(exc)
                     st.rerun()
 
             if author.strip() and st.session_state.get(submitted_key):
+                cloud_notice = st.session_state.pop(f"cloud_submit_notice_{d['id']}", None)
+                if cloud_notice == "success":
+                    st.success("✅ Submitted to your teacher. Your teacher can now see this work in the assignment inbox.")
+                elif cloud_notice:
+                    st.error(f"Your work is still saved on this screen, but it did not reach the teacher inbox: {cloud_notice} Press **Re-submit Updated Investigation** to try again.")
                 math_grade = calculate_claim_math_grade(d)
                 if support == "Training Mode":
                     st.success(f"Math verified before submission: {math_grade['correct']} of {math_grade['total']} correct.")
@@ -2586,7 +2776,7 @@ st.markdown("""
   <div class="studio-step">Sports by the Numbers</div>
   <h1 style="margin:.2rem 0 .35rem;">📊 Sports Data Studio</h1>
   <p style="margin:0;">Enter it. Graph it. Analyze it. Defend it.</p>
-            <span class="build-badge">Filtered Teacher Dashboard build 2026.09.22</span>
+            <span class="build-badge">Automatic Assignment Inbox build 2026.09.22</span>
 </div>
 """,unsafe_allow_html=True)
 
