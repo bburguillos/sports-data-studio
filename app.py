@@ -988,12 +988,15 @@ def render_teacher_review_dashboard():
                 raise ValueError("unsupported progress file")
             grade = calculate_claim_math_grade(debate, state)
             submitted = bool(state.get(f"v2_submitted_{claim_id}"))
+            assignment = payload.get("assignment") if isinstance(payload.get("assignment"), dict) else {}
             records.append({
                 "file": upload.name,
                 "student": str(state.get(f"v2_author_{claim_id}") or "Unnamed student").strip(),
                 "class_period": str(state.get(f"v2_class_{claim_id}") or "—").strip(),
                 "claim": debate["question"],
                 "sport": debate["sport"],
+                "assignment_code": str(assignment.get("code") or "Open exploration"),
+                "level": str(assignment.get("level") or "Open"),
                 "submitted": submitted,
                 "math_correct": f"{grade['correct']}/{grade['total']}" if grade else "—",
                 "suggested_math": grade["rubric_score"] if grade else 0,
@@ -1009,10 +1012,99 @@ def render_teacher_review_dashboard():
         st.error("No valid Sports Data Studio progress files were found.")
         return
 
+    st.markdown("### 🔎 Filter submissions")
+    filter_row_1 = st.columns(3)
+    with filter_row_1[0]:
+        selected_classes = st.multiselect(
+            "Class period",
+            sorted({row["class_period"] for row in records}),
+            key="review_filter_classes",
+            placeholder="All class periods"
+        )
+    with filter_row_1[1]:
+        selected_assignments = st.multiselect(
+            "Assignment code",
+            sorted({row["assignment_code"] for row in records}),
+            key="review_filter_assignments",
+            placeholder="All assignments"
+        )
+    with filter_row_1[2]:
+        selected_sports = st.multiselect(
+            "Sport",
+            sorted({row["sport"] for row in records}),
+            key="review_filter_sports",
+            placeholder="All sports"
+        )
+
+    filter_row_2 = st.columns(3)
+    with filter_row_2[0]:
+        selected_claims = st.multiselect(
+            "Claim / task",
+            sorted({row["claim"] for row in records}),
+            key="review_filter_claims",
+            placeholder="All claims"
+        )
+    with filter_row_2[1]:
+        selected_levels = st.multiselect(
+            "Difficulty level",
+            sorted({row["level"] for row in records}),
+            key="review_filter_levels",
+            placeholder="All levels"
+        )
+    with filter_row_2[2]:
+        selected_status = st.selectbox(
+            "Submission status",
+            ["All", "Submitted", "Draft / not submitted"],
+            key="review_filter_status"
+        )
+
+    student_search = st.text_input(
+        "Search student name",
+        key="review_filter_student",
+        placeholder="Type part of a student’s name"
+    ).strip().casefold()
+
+    filter_keys = [
+        "review_filter_classes", "review_filter_assignments", "review_filter_sports",
+        "review_filter_claims", "review_filter_levels", "review_filter_status",
+        "review_filter_student"
+    ]
+    if st.button("🧹 Clear all filters", key="clear_review_filters"):
+        for key in filter_keys:
+            st.session_state.pop(key, None)
+        st.rerun()
+
+    filtered_records = records
+    if selected_classes:
+        filtered_records = [row for row in filtered_records if row["class_period"] in selected_classes]
+    if selected_assignments:
+        filtered_records = [row for row in filtered_records if row["assignment_code"] in selected_assignments]
+    if selected_sports:
+        filtered_records = [row for row in filtered_records if row["sport"] in selected_sports]
+    if selected_claims:
+        filtered_records = [row for row in filtered_records if row["claim"] in selected_claims]
+    if selected_levels:
+        filtered_records = [row for row in filtered_records if row["level"] in selected_levels]
+    if selected_status == "Submitted":
+        filtered_records = [row for row in filtered_records if row["submitted"]]
+    elif selected_status == "Draft / not submitted":
+        filtered_records = [row for row in filtered_records if not row["submitted"]]
+    if student_search:
+        filtered_records = [row for row in filtered_records if student_search in row["student"].casefold()]
+
+    st.caption(f"Showing **{len(filtered_records)}** of **{len(records)}** uploaded submissions.")
+    if not filtered_records:
+        st.warning("No submissions match the current filters. Change a selection or choose **Clear all filters**.")
+        return
+
+    records = filtered_records
+
     overview = pd.DataFrame([
         {
             "Student": row["student"],
             "Class": row["class_period"],
+            "Assignment": row["assignment_code"],
+            "Level": row["level"],
             "Sport": row["sport"],
             "Submitted": "Yes" if row["submitted"] else "Not yet",
             "Math": row["math_correct"],
@@ -1034,8 +1126,10 @@ def render_teacher_review_dashboard():
     summary_rows = []
     for index, row in enumerate(records):
         label = f"{row['student']} · {row['class_period']} · {row['sport']}"
+        stable_key = zlib.crc32(f"{row['file']}|{row['claim']}|{row['student']}".encode("utf-8"))
         with st.expander(label, expanded=False):
             st.write(f"**Claim:** {row['claim']}")
+            st.write(f"**Assignment:** {row['assignment_code']} · **Level:** {row['level']}")
             status = "Submitted" if row["submitted"] else "Draft / not submitted"
             st.write(f"**Status:** {status} · **Automatic math check:** {row['math_correct']}")
             c1, c2, c3, c4 = st.columns(4)
@@ -1044,12 +1138,13 @@ def render_teacher_review_dashboard():
             scores = []
             for col, criterion, default in zip((c1, c2, c3, c4), labels, defaults):
                 with col:
-                    scores.append(st.number_input(criterion, min_value=0, max_value=4, value=int(default), step=1, key=f"teacher_score_{index}_{criterion}"))
-            feedback = st.text_area("Teacher feedback", key=f"teacher_feedback_{index}", height=80)
+                    scores.append(st.number_input(criterion, min_value=0, max_value=4, value=int(default), step=1, key=f"teacher_score_{stable_key}_{criterion}"))
+            feedback = st.text_area("Teacher feedback", key=f"teacher_feedback_{stable_key}", height=80)
             total = sum(scores)
             st.success(f"Current rubric total: {total}/16")
             summary_rows.append({
-                "Student": row["student"], "Class": row["class_period"], "Sport": row["sport"],
+                "Student": row["student"], "Class": row["class_period"],
+                "Assignment": row["assignment_code"], "Level": row["level"], "Sport": row["sport"],
                 "Submitted": status, "Math Check": row["math_correct"],
                 "Research & Data": scores[0], "Mathematical Process": scores[1],
                 "Statistical Interpretation": scores[2], "Claim & Article": scores[3],
@@ -2491,7 +2586,7 @@ st.markdown("""
   <div class="studio-step">Sports by the Numbers</div>
   <h1 style="margin:.2rem 0 .35rem;">📊 Sports Data Studio</h1>
   <p style="margin:0;">Enter it. Graph it. Analyze it. Defend it.</p>
-            <span class="build-badge">Floating Save + Resume build 2026.09.21</span>
+            <span class="build-badge">Filtered Teacher Dashboard build 2026.09.22</span>
 </div>
 """,unsafe_allow_html=True)
 
